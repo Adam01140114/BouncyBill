@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bouncy Bill - Multiplayer</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Main Menu Screen -->
+    <div id="menuScreen" class="screen active">
+        <div class="container">
+            <h1>Bouncy Bill</h1>
+            <p class="subtitle">Two-player online action game</p>
+            <div class="button-group">
+                <button id="createRoomBtn" class="btn btn-primary">Create Room</button>
+                <button id="joinRoomBtn" class="btn btn-secondary">Join Room</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Room Creation Screen -->
+    <div id="createRoomScreen" class="screen">
+        <div class="container">
+            <h2>Room Created</h2>
+            <div class="room-code-container">
+                <p class="label">Room Code:</p>
+                <div class="room-code" id="roomCodeDisplay">----</div>
+                <button id="copyRoomCodeBtn" class="btn btn-small">Copy</button>
+            </div>
+            <p class="waiting-text" id="waitingText">Waiting for Player B...</p>
+            <button id="cancelCreateBtn" class="btn btn-secondary">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Join Room Screen -->
+    <div id="joinRoomScreen" class="screen">
+        <div class="container">
+            <h2>Join Room</h2>
+            <input type="text" id="roomCodeInput" class="room-input" placeholder="Enter Room Code" maxlength="6" autocomplete="off">
+            <div class="button-group">
+                <button id="joinRoomSubmitBtn" class="btn btn-primary">Join</button>
+                <button id="cancelJoinBtn" class="btn btn-secondary">Back</button>
+            </div>
+            <p id="joinError" class="error-message"></p>
+        </div>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="gameScreen" class="screen">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="countdownOverlay" class="overlay">
+            <div id="countdownText" class="countdown-text"></div>
+        </div>
+        <div id="winOverlay" class="overlay hidden">
+            <div class="win-message">
+                <h2 id="winText"></h2>
+                <div class="button-group">
+                    <button id="playAgainBtn" class="btn btn-primary">Play Again</button>
+                    <button id="exitRoomBtn" class="btn btn-secondary">Exit Room</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="network.js"></script>
+    <script src="game.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+

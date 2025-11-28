@@ -1,0 +1,17 @@
+{
+  "name": "bouncy-bill",
+  "version": "1.0.0",
+  "description": "Two-player online action game with real-time multiplayer",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js"
+  },
+  "keywords": ["game", "multiplayer", "websocket"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.14.2"
+  }
+}
+
