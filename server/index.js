@@ -259,8 +259,25 @@ class Room {
 
       if (p1IsOnTop) {
         // p1 is on top, check if p1's bottom (butt) hits p2's top (head)
-        const verticalDistance = p1Bottom - p2Top;
-        const isInContact = verticalDistance >= 0 && verticalDistance < 10;
+        // Use proper hitbox dimensions (10% larger than before)
+        const hitboxWidth = ovalWidth * 0.8 * 1.1; // 10% wider
+        const hitboxHeight = ovalHeight * 0.2 * 1.1; // 10% taller
+        
+        // Calculate hitbox positions
+        const p1ButtLeft = p1.position.x - hitboxWidth / 2;
+        const p1ButtRight = p1.position.x + hitboxWidth / 2;
+        const p1ButtTop = p1Bottom - hitboxHeight;
+        const p1ButtBottom = p1Bottom;
+        
+        const p2HeadLeft = p2.position.x - hitboxWidth / 2;
+        const p2HeadRight = p2.position.x + hitboxWidth / 2;
+        const p2HeadTop = p2Top;
+        const p2HeadBottom = p2Top + hitboxHeight;
+        
+        // Check if butt hitbox overlaps with head hitbox
+        const horizontalOverlap = !(p1ButtRight < p2HeadLeft || p1ButtLeft > p2HeadRight);
+        const verticalOverlap = !(p1ButtBottom < p2HeadTop || p1ButtTop > p2HeadBottom);
+        const isInContact = horizontalOverlap && verticalOverlap;
 
         if (isInContact) {
           // Check if this is a NEW contact (not already registered)
@@ -309,8 +326,25 @@ class Room {
         }
       } else {
         // p2 is on top, check if p2's bottom (butt) hits p1's top (head)
-        const verticalDistance = p2Bottom - p1Top;
-        const isInContact = verticalDistance >= 0 && verticalDistance < 10;
+        // Use proper hitbox dimensions (10% larger than before)
+        const hitboxWidth = ovalWidth * 0.8 * 1.1; // 10% wider
+        const hitboxHeight = ovalHeight * 0.2 * 1.1; // 10% taller
+        
+        // Calculate hitbox positions
+        const p2ButtLeft = p2.position.x - hitboxWidth / 2;
+        const p2ButtRight = p2.position.x + hitboxWidth / 2;
+        const p2ButtTop = p2Bottom - hitboxHeight;
+        const p2ButtBottom = p2Bottom;
+        
+        const p1HeadLeft = p1.position.x - hitboxWidth / 2;
+        const p1HeadRight = p1.position.x + hitboxWidth / 2;
+        const p1HeadTop = p1Top;
+        const p1HeadBottom = p1Top + hitboxHeight;
+        
+        // Check if butt hitbox overlaps with head hitbox
+        const horizontalOverlap = !(p2ButtRight < p1HeadLeft || p2ButtLeft > p1HeadRight);
+        const verticalOverlap = !(p2ButtBottom < p1HeadTop || p2ButtTop > p1HeadBottom);
+        const isInContact = horizontalOverlap && verticalOverlap;
 
         if (isInContact) {
           // Check if this is a NEW contact (not already registered)
