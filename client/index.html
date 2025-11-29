@@ -15,6 +15,7 @@
             <div class="button-group">
                 <button id="createRoomBtn" class="btn btn-primary">Create Room</button>
                 <button id="joinRoomBtn" class="btn btn-secondary">Join Room</button>
+                <button id="myLevelsBtn" class="btn btn-secondary">My Levels</button>
             </div>
         </div>
     </div>
@@ -49,6 +50,17 @@
     <!-- Game Screen -->
     <div id="gameScreen" class="screen">
         <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="scoreDisplay" class="score-display">
+            <div class="score-item">
+                <span class="score-label">You:</span>
+                <span id="scoreLocal" class="score-value">0</span>
+            </div>
+            <div id="timerDisplay" class="timer-display">01:00</div>
+            <div class="score-item">
+                <span class="score-label">Opponent:</span>
+                <span id="scoreOpponent" class="score-value">0</span>
+            </div>
+        </div>
         <div id="countdownOverlay" class="overlay">
             <div id="countdownText" class="countdown-text"></div>
         </div>
@@ -63,6 +75,74 @@
         </div>
     </div>
 
+    <!-- Auth Popup -->
+    <div id="authPopup" class="overlay hidden">
+        <div class="container">
+            <h2>Sign In / Sign Up</h2>
+            <div id="authError" class="error-message"></div>
+            <input type="email" id="authEmail" class="room-input" placeholder="Email" autocomplete="email">
+            <input type="password" id="authPassword" class="room-input" placeholder="Password" autocomplete="current-password">
+            <div class="button-group">
+                <button id="signInBtn" class="btn btn-primary">Sign In</button>
+                <button id="signUpBtn" class="btn btn-secondary">Sign Up</button>
+                <button id="cancelAuthBtn" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- My Levels Module -->
+    <div id="myLevelsModule" class="screen">
+        <div class="container">
+            <h2>My Levels</h2>
+            <div id="levelsList" class="levels-list">
+                <p class="no-levels-text">You currently have no levels</p>
+            </div>
+            <div class="button-group">
+                <button id="addLevelBtn" class="btn btn-primary">Add Level</button>
+                <button id="closeLevelsBtn" class="btn btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Level Editor -->
+    <div id="levelEditorScreen" class="screen">
+        <div class="level-editor-container">
+            <h2>Level Editor</h2>
+            <canvas id="levelEditorCanvas" width="600" height="600"></canvas>
+            <div class="editor-controls">
+                <p>Click to place/remove blocks</p>
+                <div class="button-group">
+                    <button id="submitLevelBtn" class="btn btn-primary">Submit Level</button>
+                    <button id="cancelEditorBtn" class="btn btn-secondary">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFirestore, collection, addDoc, getDocs, query, where, doc, updateDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDAlP_Ku6KDjmP_eGXAkWaLIdgB67kFOaQ",
+            authDomain: "bouncybob-2c2f9.firebaseapp.com",
+            projectId: "bouncybob-2c2f9",
+            storageBucket: "bouncybob-2c2f9.firebasestorage.app",
+            messagingSenderId: "546947910128",
+            appId: "1:546947910128:web:f89e32782a391e784a3535",
+            measurementId: "G-GBL1SYMNGE"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        window.firebaseAuth = auth;
+        window.firebaseDb = db;
+    </script>
+    <script src="auth.js"></script>
+    <script src="levelEditor.js"></script>
     <script src="network.js"></script>
     <script src="game.js"></script>
     <script src="app.js"></script>

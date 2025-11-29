@@ -11,7 +11,8 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "ws": "^8.14.2"
+    "ws": "^8.14.2",
+    "firebase": "^10.7.1"
   }
 }
 

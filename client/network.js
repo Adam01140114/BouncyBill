@@ -74,6 +74,17 @@ class NetworkManager {
         this.send('createRoom');
     }
 
+    createRoomWithLevel(level) {
+        // Send only the necessary level data (blocks, name, id)
+        this.send('createRoomWithLevel', { 
+            level: {
+                id: level.id,
+                name: level.name,
+                blocks: level.blocks
+            }
+        });
+    }
+
     joinRoom(roomId) {
         this.send('joinRoom', { roomId: roomId.toUpperCase() });
     }

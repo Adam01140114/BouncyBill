@@ -56,6 +56,12 @@ class Room {
     this.gameState = null;
     this.countdown = null;
     this.winner = null;
+    this.headBounceCooldowns = new Map(); // playerId -> timestamp when next bounce allowed
+    this.headContactStates = new Map(); // playerId -> Set of playerIds they're currently in head contact with
+    this.scores = new Map(); // playerId -> score
+    this.timerEnd = null; // timestamp when timer expires
+    this.MATCH_DURATION_MS = 60000; // 1 minute
+    this.customLevel = null; // Custom level data if room was created with a level
   }
 
   addPlayer(playerId, ws) {
@@ -68,11 +74,20 @@ class Room {
       arrowAngle: 0,
       side: this.players.size === 0 ? 'left' : 'right'
     });
+    // Initialize score
+    this.scores.set(playerId, 0);
     return this.players.size === 2;
   }
 
   removePlayer(playerId) {
     this.players.delete(playerId);
+    this.headBounceCooldowns.delete(playerId);
+    this.headContactStates.delete(playerId);
+    this.scores.delete(playerId);
+    // Remove this player from other players' contact states
+    this.headContactStates.forEach((contactSet) => {
+      contactSet.delete(playerId);
+    });
   }
 
   isEmpty() {
@@ -108,6 +123,13 @@ class Room {
       started: false,
       countdown: 3
     };
+    
+    // Reset scores and timer
+    this.scores.forEach((score, playerId) => {
+      this.scores.set(playerId, 0);
+    });
+    this.timerEnd = null;
+    this.winner = null;
 
     // Start countdown
     this.countdown = 3;
@@ -123,7 +145,10 @@ class Room {
           grounded: p.grounded,
           arrowAngle: p.arrowAngle,
           side: p.side
-        }))
+        })),
+        scores: Array.from(this.scores.entries()).map(([id, score]) => ({ id, score })),
+        matchDuration: this.MATCH_DURATION_MS,
+        customLevel: this.customLevel
       }));
     });
 
@@ -142,6 +167,7 @@ class Room {
           message: 'Bounce!'
         });
         this.gameState.started = true;
+        this.timerEnd = Date.now() + this.MATCH_DURATION_MS;
         clearInterval(countdownInterval);
       }
     }, 1000);
@@ -198,35 +224,172 @@ class Room {
 
     if (horizontalOverlap) {
       // Determine which player is on top (lower y position = higher on screen)
-      // The player on top is the one whose bottom can hit the other's head
       const p1IsOnTop = p1.position.y < p2.position.y;
+
+      // Initialize contact states if needed
+      if (!this.headContactStates.has(p1.id)) {
+        this.headContactStates.set(p1.id, new Set());
+      }
+      if (!this.headContactStates.has(p2.id)) {
+        this.headContactStates.set(p2.id, new Set());
+      }
+      
+      const p1Contacts = this.headContactStates.get(p1.id);
+      const p2Contacts = this.headContactStates.get(p2.id);
 
       if (p1IsOnTop) {
         // p1 is on top, check if p1's bottom (butt) hits p2's top (head)
         const verticalDistance = p1Bottom - p2Top;
-        if (verticalDistance >= 0 && verticalDistance < 10) {
-          // Player 1 wins (p1's butt hit p2's head)
-          this.winner = p1.id;
-          this.broadcast({
-            type: 'win',
-            winner: p1.id,
-            message: 'Player A Wins!'
-          });
-          return;
+        const isInContact = verticalDistance >= 0 && verticalDistance < 10;
+        
+        console.log(`[checkCollisions] p1 on top - verticalDistance: ${verticalDistance.toFixed(2)}, isInContact: ${isInContact}, p1Contacts.has(p2): ${p1Contacts.has(p2.id)}`);
+        
+        if (isInContact) {
+          // Check if this is a NEW contact (not already registered)
+          const isNewContact = !p1Contacts.has(p2.id);
+          
+          console.log(`[checkCollisions] p1->p2 contact - isNewContact: ${isNewContact}`);
+          
+          if (isNewContact) {
+            // Mark as in contact
+            p1Contacts.add(p2.id);
+            p2Contacts.add(p1.id);
+            console.log(`[checkCollisions] NEW CONTACT: p1->p2, marking as in contact`);
+            
+            // Check cooldown
+            const now = Date.now();
+            const nextAllowed = this.headBounceCooldowns.get(p1.id) || 0;
+            const cooldownRemaining = nextAllowed - now;
+            console.log(`[checkCollisions] p1 cooldown check - now: ${now}, nextAllowed: ${nextAllowed}, remaining: ${cooldownRemaining}ms`);
+            
+            if (now >= nextAllowed) {
+              this.headBounceCooldowns.set(p1.id, now + 670);
+              // Increment score
+              const currentScore = this.scores.get(p1.id) || 0;
+              this.scores.set(p1.id, currentScore + 1);
+              console.log(`[checkCollisions] BROADCASTING headBounce: p1->p2, p1 score: ${currentScore + 1}`);
+              // Notify players of head bounce (no instant win)
+              this.broadcast({
+                type: 'headBounce',
+                attackerId: p1.id,
+                targetId: p2.id
+              });
+              // Broadcast score update
+              this.broadcast({
+                type: 'scoreUpdate',
+                scores: Array.from(this.scores.entries()).map(([id, score]) => ({ id, score }))
+              });
+            } else {
+              console.log(`[checkCollisions] p1 cooldown active, skipping headBounce`);
+            }
+          } else {
+            console.log(`[checkCollisions] p1->p2 already in contact, skipping`);
+          }
+        } else {
+          // No longer in contact - remove from contact states
+          if (p1Contacts.has(p2.id)) {
+            console.log(`[checkCollisions] p1->p2 contact ended, clearing state`);
+            p1Contacts.delete(p2.id);
+            p2Contacts.delete(p1.id);
+          }
         }
       } else {
         // p2 is on top, check if p2's bottom (butt) hits p1's top (head)
         const verticalDistance = p2Bottom - p1Top;
-        if (verticalDistance >= 0 && verticalDistance < 10) {
-          // Player 2 wins (p2's butt hit p1's head)
-          this.winner = p2.id;
-          this.broadcast({
-            type: 'win',
-            winner: p2.id,
-            message: 'Player B Wins!'
-          });
-          return;
+        const isInContact = verticalDistance >= 0 && verticalDistance < 10;
+        
+        console.log(`[checkCollisions] p2 on top - verticalDistance: ${verticalDistance.toFixed(2)}, isInContact: ${isInContact}, p2Contacts.has(p1): ${p2Contacts.has(p1.id)}`);
+        
+        if (isInContact) {
+          // Check if this is a NEW contact (not already registered)
+          const isNewContact = !p2Contacts.has(p1.id);
+          
+          console.log(`[checkCollisions] p2->p1 contact - isNewContact: ${isNewContact}`);
+          
+          if (isNewContact) {
+            // Mark as in contact
+            p2Contacts.add(p1.id);
+            p1Contacts.add(p2.id);
+            console.log(`[checkCollisions] NEW CONTACT: p2->p1, marking as in contact`);
+            
+            // Check cooldown
+            const now = Date.now();
+            const nextAllowed = this.headBounceCooldowns.get(p2.id) || 0;
+            const cooldownRemaining = nextAllowed - now;
+            console.log(`[checkCollisions] p2 cooldown check - now: ${now}, nextAllowed: ${nextAllowed}, remaining: ${cooldownRemaining}ms`);
+            
+            if (now >= nextAllowed) {
+              this.headBounceCooldowns.set(p2.id, now + 670);
+              // Increment score
+              const currentScore = this.scores.get(p2.id) || 0;
+              this.scores.set(p2.id, currentScore + 1);
+              console.log(`[checkCollisions] BROADCASTING headBounce: p2->p1, p2 score: ${currentScore + 1}`);
+              this.broadcast({
+                type: 'headBounce',
+                attackerId: p2.id,
+                targetId: p1.id
+              });
+              // Broadcast score update
+              this.broadcast({
+                type: 'scoreUpdate',
+                scores: Array.from(this.scores.entries()).map(([id, score]) => ({ id, score }))
+              });
+            } else {
+              console.log(`[checkCollisions] p2 cooldown active, skipping headBounce`);
+            }
+          } else {
+            console.log(`[checkCollisions] p2->p1 already in contact, skipping`);
+          }
+        } else {
+          // No longer in contact - remove from contact states
+          if (p2Contacts.has(p1.id)) {
+            console.log(`[checkCollisions] p2->p1 contact ended, clearing state`);
+            p2Contacts.delete(p1.id);
+            p1Contacts.delete(p2.id);
+          }
         }
+      }
+    } else {
+      // No horizontal overlap - clear contact states
+      if (this.headContactStates.has(p1.id) && this.headContactStates.get(p1.id).has(p2.id)) {
+        console.log(`[checkCollisions] No horizontal overlap, clearing p1->p2 contact`);
+        this.headContactStates.get(p1.id).delete(p2.id);
+      }
+      if (this.headContactStates.has(p2.id) && this.headContactStates.get(p2.id).has(p1.id)) {
+        console.log(`[checkCollisions] No horizontal overlap, clearing p2->p1 contact`);
+        this.headContactStates.get(p2.id).delete(p1.id);
+      }
+    }
+  }
+
+  checkTimer() {
+    if (!this.gameState || !this.gameState.started || this.winner) return;
+    if (!this.timerEnd) return;
+
+    const now = Date.now();
+    if (now >= this.timerEnd) {
+      // Timer expired - determine winner
+      this.gameState.started = false;
+      const playersArray = Array.from(this.players.values());
+      if (playersArray.length === 2) {
+        const p1Score = this.scores.get(playersArray[0].id) || 0;
+        const p2Score = this.scores.get(playersArray[1].id) || 0;
+        
+        let winnerId = null;
+        if (p1Score > p2Score) {
+          winnerId = playersArray[0].id;
+        } else if (p2Score > p1Score) {
+          winnerId = playersArray[1].id;
+        }
+        // If tie, winnerId remains null
+        
+        this.winner = winnerId;
+        this.broadcast({
+          type: 'matchEnd',
+          winner: winnerId,
+          scores: Array.from(this.scores.entries()).map(([id, score]) => ({ id, score })),
+          isTie: winnerId === null
+        });
       }
     }
   }
@@ -279,6 +442,24 @@ wss.on('connection', (ws) => {
               type: 'roomCreated',
               roomId: roomId,
               playerId: playerId
+            }));
+          }
+          break;
+
+        case 'createRoomWithLevel':
+          {
+            const roomId = generateRoomId();
+            const room = new Room(roomId, playerId);
+            room.customLevel = data.level; // Store custom level
+            rooms.set(roomId, room);
+            room.addPlayer(playerId, ws);
+            player.roomId = roomId;
+
+            ws.send(JSON.stringify({
+              type: 'roomCreated',
+              roomId: roomId,
+              playerId: playerId,
+              hasCustomLevel: true
             }));
           }
           break;
