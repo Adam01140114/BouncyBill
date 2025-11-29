@@ -123,7 +123,7 @@ class Room {
       started: false,
       countdown: 3
     };
-    
+
     // Reset scores and timer
     this.scores.forEach((score, playerId) => {
       this.scores.set(playerId, 0);
@@ -133,6 +133,7 @@ class Room {
 
     // Start countdown
     this.countdown = 3;
+    this.countdownInterval = null; // Store interval so we can clear it on skip
     this.players.forEach((player, playerId) => {
       player.ws.send(JSON.stringify({
         type: 'gameStart',
@@ -153,7 +154,7 @@ class Room {
     });
 
     // Countdown sequence
-    const countdownInterval = setInterval(() => {
+    this.countdownInterval = setInterval(() => {
       this.countdown--;
       if (this.countdown > 0) {
         this.broadcast({
@@ -168,9 +169,28 @@ class Room {
         });
         this.gameState.started = true;
         this.timerEnd = Date.now() + this.MATCH_DURATION_MS;
-        clearInterval(countdownInterval);
+        clearInterval(this.countdownInterval);
+        this.countdownInterval = null;
       }
     }, 1000);
+  }
+
+  skipCountdown() {
+    if (this.countdownInterval && this.countdown > 0) {
+      // Clear the countdown interval
+      clearInterval(this.countdownInterval);
+      this.countdownInterval = null;
+
+      // Immediately send "Bounce!" message
+      this.broadcast({
+        type: 'countdown',
+        countdown: 0,
+        message: 'Bounce!'
+      });
+      this.gameState.started = true;
+      this.timerEnd = Date.now() + this.MATCH_DURATION_MS;
+      this.countdown = 0;
+    }
   }
 
   updatePlayerState(playerId, state) {
@@ -233,7 +253,7 @@ class Room {
       if (!this.headContactStates.has(p2.id)) {
         this.headContactStates.set(p2.id, new Set());
       }
-      
+
       const p1Contacts = this.headContactStates.get(p1.id);
       const p2Contacts = this.headContactStates.get(p2.id);
 
@@ -241,33 +261,27 @@ class Room {
         // p1 is on top, check if p1's bottom (butt) hits p2's top (head)
         const verticalDistance = p1Bottom - p2Top;
         const isInContact = verticalDistance >= 0 && verticalDistance < 10;
-        
-        console.log(`[checkCollisions] p1 on top - verticalDistance: ${verticalDistance.toFixed(2)}, isInContact: ${isInContact}, p1Contacts.has(p2): ${p1Contacts.has(p2.id)}`);
-        
+
         if (isInContact) {
           // Check if this is a NEW contact (not already registered)
           const isNewContact = !p1Contacts.has(p2.id);
-          
-          console.log(`[checkCollisions] p1->p2 contact - isNewContact: ${isNewContact}`);
-          
+
           if (isNewContact) {
             // Mark as in contact
             p1Contacts.add(p2.id);
             p2Contacts.add(p1.id);
-            console.log(`[checkCollisions] NEW CONTACT: p1->p2, marking as in contact`);
-            
+
             // Check cooldown
             const now = Date.now();
             const nextAllowed = this.headBounceCooldowns.get(p1.id) || 0;
             const cooldownRemaining = nextAllowed - now;
-            console.log(`[checkCollisions] p1 cooldown check - now: ${now}, nextAllowed: ${nextAllowed}, remaining: ${cooldownRemaining}ms`);
-            
+
             if (now >= nextAllowed) {
               this.headBounceCooldowns.set(p1.id, now + 670);
               // Increment score
               const currentScore = this.scores.get(p1.id) || 0;
               this.scores.set(p1.id, currentScore + 1);
-              console.log(`[checkCollisions] BROADCASTING headBounce: p1->p2, p1 score: ${currentScore + 1}`);
+
               // Notify players of head bounce (no instant win)
               this.broadcast({
                 type: 'headBounce',
@@ -280,15 +294,15 @@ class Room {
                 scores: Array.from(this.scores.entries()).map(([id, score]) => ({ id, score }))
               });
             } else {
-              console.log(`[checkCollisions] p1 cooldown active, skipping headBounce`);
+
             }
           } else {
-            console.log(`[checkCollisions] p1->p2 already in contact, skipping`);
+
           }
         } else {
           // No longer in contact - remove from contact states
           if (p1Contacts.has(p2.id)) {
-            console.log(`[checkCollisions] p1->p2 contact ended, clearing state`);
+
             p1Contacts.delete(p2.id);
             p2Contacts.delete(p1.id);
           }
@@ -297,33 +311,27 @@ class Room {
         // p2 is on top, check if p2's bottom (butt) hits p1's top (head)
         const verticalDistance = p2Bottom - p1Top;
         const isInContact = verticalDistance >= 0 && verticalDistance < 10;
-        
-        console.log(`[checkCollisions] p2 on top - verticalDistance: ${verticalDistance.toFixed(2)}, isInContact: ${isInContact}, p2Contacts.has(p1): ${p2Contacts.has(p1.id)}`);
-        
+
         if (isInContact) {
           // Check if this is a NEW contact (not already registered)
           const isNewContact = !p2Contacts.has(p1.id);
-          
-          console.log(`[checkCollisions] p2->p1 contact - isNewContact: ${isNewContact}`);
-          
+
           if (isNewContact) {
             // Mark as in contact
             p2Contacts.add(p1.id);
             p1Contacts.add(p2.id);
-            console.log(`[checkCollisions] NEW CONTACT: p2->p1, marking as in contact`);
-            
+
             // Check cooldown
             const now = Date.now();
             const nextAllowed = this.headBounceCooldowns.get(p2.id) || 0;
             const cooldownRemaining = nextAllowed - now;
-            console.log(`[checkCollisions] p2 cooldown check - now: ${now}, nextAllowed: ${nextAllowed}, remaining: ${cooldownRemaining}ms`);
-            
+
             if (now >= nextAllowed) {
               this.headBounceCooldowns.set(p2.id, now + 670);
               // Increment score
               const currentScore = this.scores.get(p2.id) || 0;
               this.scores.set(p2.id, currentScore + 1);
-              console.log(`[checkCollisions] BROADCASTING headBounce: p2->p1, p2 score: ${currentScore + 1}`);
+
               this.broadcast({
                 type: 'headBounce',
                 attackerId: p2.id,
@@ -335,15 +343,15 @@ class Room {
                 scores: Array.from(this.scores.entries()).map(([id, score]) => ({ id, score }))
               });
             } else {
-              console.log(`[checkCollisions] p2 cooldown active, skipping headBounce`);
+
             }
           } else {
-            console.log(`[checkCollisions] p2->p1 already in contact, skipping`);
+
           }
         } else {
           // No longer in contact - remove from contact states
           if (p2Contacts.has(p1.id)) {
-            console.log(`[checkCollisions] p2->p1 contact ended, clearing state`);
+
             p2Contacts.delete(p1.id);
             p1Contacts.delete(p2.id);
           }
@@ -352,11 +360,11 @@ class Room {
     } else {
       // No horizontal overlap - clear contact states
       if (this.headContactStates.has(p1.id) && this.headContactStates.get(p1.id).has(p2.id)) {
-        console.log(`[checkCollisions] No horizontal overlap, clearing p1->p2 contact`);
+
         this.headContactStates.get(p1.id).delete(p2.id);
       }
       if (this.headContactStates.has(p2.id) && this.headContactStates.get(p2.id).has(p1.id)) {
-        console.log(`[checkCollisions] No horizontal overlap, clearing p2->p1 contact`);
+
         this.headContactStates.get(p2.id).delete(p1.id);
       }
     }
@@ -374,7 +382,7 @@ class Room {
       if (playersArray.length === 2) {
         const p1Score = this.scores.get(playersArray[0].id) || 0;
         const p2Score = this.scores.get(playersArray[1].id) || 0;
-        
+
         let winnerId = null;
         if (p1Score > p2Score) {
           winnerId = playersArray[0].id;
@@ -382,7 +390,7 @@ class Room {
           winnerId = playersArray[1].id;
         }
         // If tie, winnerId remains null
-        
+
         this.winner = winnerId;
         this.broadcast({
           type: 'matchEnd',
@@ -553,6 +561,16 @@ wss.on('connection', (ws) => {
             room.winner = null;
             room.gameState = null;
             room.startGame();
+          }
+          break;
+
+        case 'skipCountdown':
+          {
+            const room = rooms.get(player.roomId);
+            if (!room || !room.gameState || room.gameState.started) return;
+
+            // Skip countdown - immediately start the game
+            room.skipCountdown();
           }
           break;
       }

@@ -117,11 +117,11 @@ networkManager.on('roomCreated', (data) => {
     networkManager.playerId = data.playerId;
     networkManager.roomId = data.roomId;
     roomCodeDisplay.textContent = data.roomId;
-    
+
     // Always show the create room screen with the room code
     showScreen(createRoomScreen);
     waitingText.textContent = 'Waiting for Player B...';
-    
+
     // Auto-copy room code to clipboard
     navigator.clipboard.writeText(data.roomId).then(() => {
         if (copyRoomCodeBtn) {
@@ -157,7 +157,7 @@ networkManager.on('playerJoined', (data) => {
 
 networkManager.on('gameStart', (data) => {
     showScreen(gameScreen);
-    
+
     // Initialize game
     if (!game) {
         game = new Game(gameCanvas, networkManager);
@@ -168,7 +168,7 @@ networkManager.on('gameStart', (data) => {
 
     // Set custom level if present
     if (data.customLevel) {
-        console.log('Setting custom level:', data.customLevel);
+
         game.setCustomLevel(data.customLevel);
     }
 
@@ -179,7 +179,7 @@ networkManager.on('gameStart', (data) => {
             game.setLocalPlayer(playerData.id);
         }
     });
-    
+
     // Set up scores and opponent
     opponentPlayerId = data.players.find(p => p.id !== data.yourPlayerId)?.id || null;
     setScores(data.scores || []);
@@ -187,7 +187,15 @@ networkManager.on('gameStart', (data) => {
     // Show countdown
     countdownOverlay.classList.remove('hidden');
     countdownText.textContent = data.countdown;
-    
+
+    // Add double-click listener to skip countdown (only add once)
+    if (!countdownOverlay.hasAttribute('data-dblclick-listener')) {
+        countdownOverlay.setAttribute('data-dblclick-listener', 'true');
+        countdownOverlay.addEventListener('dblclick', () => {
+            networkManager.skipCountdown();
+        });
+    }
+
     // Store match duration to start timer when countdown ends
     if (data.matchDuration) {
         pendingTimerDuration = data.matchDuration;
@@ -238,38 +246,42 @@ networkManager.on('stateUpdate', (data) => {
 });
 
 networkManager.on('headBounce', (data) => {
-    console.log(`[client] headBounce event received:`, data);
+
     if (!game) {
-        console.log(`[client] No game instance, ignoring`);
+
         return;
     }
-    
+
     // Apply mini boost to the attacker (with cooldown to prevent multiple boosts)
     const now = Date.now();
     const lastBoostTime = lastHeadBounceBoostTime.get(data.attackerId) || 0;
     const timeSinceLastBoost = now - lastBoostTime;
-    
+
     if (timeSinceLastBoost >= 670) {
         // Only apply boost if cooldown has passed
         lastHeadBounceBoostTime.set(data.attackerId, now);
-        console.log(`[client] Applying head bounce boost to ${data.attackerId}`);
+
         game.applyHeadBounceBoost(data.attackerId);
     } else {
-        console.log(`[client] Boost cooldown active for ${data.attackerId}, skipping boost (${timeSinceLastBoost}ms since last)`);
+
     }
-    
+
+    // Freeze arrow oscillation for the player who GOT bounced on (target)
+    // Their arrow will stop oscillating for 1 second
+    game.freezeArrowFor(data.targetId, 1000);
+
     if (game.localPlayerId === data.attackerId) {
         const timeSinceLastAlert = now - lastHeadBounceAlertTime;
-        console.log(`[client] Local player is attacker, time since last alert: ${timeSinceLastAlert}ms`);
+
         if (timeSinceLastAlert < 670) {
-            console.log(`[client] Alert cooldown active, skipping alert`);
+
             return;
         }
         lastHeadBounceAlertTime = now;
-        console.log(`[client] Showing alert: "You bounced on their head!"`);
+
         alert('You bounced on their head!');
     } else {
-        console.log(`[client] Local player is not attacker (attacker: ${data.attackerId}, local: ${game.localPlayerId}), ignoring`);
+
     }
 });
 
@@ -283,7 +295,7 @@ networkManager.on('matchEnd', (data) => {
     clearMatchTimer();
     game.winner = data.winner || null;
     game.gameStarted = false;
-    
+
     let message = '';
     if (data.isTie) {
         message = 'Tie Game!';
@@ -427,9 +439,9 @@ submitLevelBtn.addEventListener('click', async () => {
         alert('You must be signed in to save levels');
         return;
     }
-    
+
     const levelData = levelEditor.getLevelData();
-    
+
     // If editing an existing level, update it without asking for name
     if (editingLevelId) {
         await updateLevel(editingLevelId, levelData);
@@ -442,7 +454,7 @@ submitLevelBtn.addEventListener('click', async () => {
         }
         await saveLevel(levelName.trim(), levelData);
     }
-    
+
     showScreen(myLevelsModule);
     loadUserLevels();
 });
@@ -450,12 +462,12 @@ submitLevelBtn.addEventListener('click', async () => {
 signInBtn.addEventListener('click', async () => {
     const email = authEmail.value.trim();
     const password = authPassword.value;
-    
+
     if (!email || !password) {
         authError.textContent = 'Please enter email and password';
         return;
     }
-    
+
     try {
         await authManager.signIn(email, password);
         authPopup.classList.add('hidden');
@@ -472,17 +484,17 @@ signInBtn.addEventListener('click', async () => {
 signUpBtn.addEventListener('click', async () => {
     const email = authEmail.value.trim();
     const password = authPassword.value;
-    
+
     if (!email || !password) {
         authError.textContent = 'Please enter email and password';
         return;
     }
-    
+
     if (password.length < 6) {
         authError.textContent = 'Password must be at least 6 characters';
         return;
     }
-    
+
     try {
         await authManager.signUp(email, password);
         authPopup.classList.add('hidden');
@@ -524,10 +536,10 @@ function resetToMenu() {
 // Firebase level management functions
 async function saveLevel(name, blocks) {
     if (!authManager.isSignedIn()) return;
-    
+
     const { collection, addDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
     const db = window.firebaseDb;
-    
+
     try {
         await addDoc(collection(db, 'levels'), {
             userId: authManager.getUserId(),
@@ -536,24 +548,24 @@ async function saveLevel(name, blocks) {
             createdAt: new Date()
         });
     } catch (error) {
-        console.error('Error saving level:', error);
+
         alert('Failed to save level');
     }
 }
 
 async function updateLevel(levelId, blocks) {
     if (!authManager.isSignedIn()) return;
-    
+
     const { doc, updateDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
     const db = window.firebaseDb;
-    
+
     try {
         await updateDoc(doc(db, 'levels', levelId), {
             blocks: blocks,
             updatedAt: new Date()
         });
     } catch (error) {
-        console.error('Error updating level:', error);
+
         alert('Failed to update level');
     }
 }
@@ -563,14 +575,14 @@ async function loadUserLevels() {
         levelsList.innerHTML = '<p class="no-levels-text">You currently have no levels</p>';
         return;
     }
-    
+
     const { collection, getDocs, query, where } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
     const db = window.firebaseDb;
-    
+
     try {
         const q = query(collection(db, 'levels'), where('userId', '==', authManager.getUserId()));
         const querySnapshot = await getDocs(q);
-        
+
         userLevels = [];
         querySnapshot.forEach((doc) => {
             userLevels.push({
@@ -578,10 +590,10 @@ async function loadUserLevels() {
                 ...doc.data()
             });
         });
-        
+
         renderLevelsList();
     } catch (error) {
-        console.error('Error loading levels:', error);
+
         levelsList.innerHTML = '<p class="no-levels-text">Error loading levels</p>';
     }
 }
@@ -591,7 +603,7 @@ function renderLevelsList() {
         levelsList.innerHTML = '<p class="no-levels-text">You currently have no levels</p>';
         return;
     }
-    
+
     levelsList.innerHTML = userLevels.map(level => `
         <div class="level-item">
             <div class="level-item-name">${level.name}</div>
@@ -601,7 +613,7 @@ function renderLevelsList() {
             </div>
         </div>
     `).join('');
-    
+
     // Add event listeners
     document.querySelectorAll('.edit-level-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
@@ -617,7 +629,7 @@ function renderLevelsList() {
             }
         });
     });
-    
+
     document.querySelectorAll('.play-level-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             const levelId = e.target.dataset.levelId;

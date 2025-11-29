@@ -14,12 +14,14 @@ class Game {
 
         // Physics constants
         this.GRAVITY = 0.5;
-        this.BOUNCE_POWER = 9.6; // 20% less than 12
+        this.BOUNCE_POWER = 11.25; // Maximum bounce power (reduced by 25% from 15.0)
+        this.MIN_BOUNCE_POWER = 7.0; // Minimum bounce power (light tap)
+        this.MAX_CHARGE_TIME = 670; // Maximum charge time in milliseconds (0.67 seconds)
         this.ARROW_OSCILLATION_SPEED = 0.036; // 20% faster than 0.03
         this.ARROW_OSCILLATION_RANGE = Math.PI; // 180 degrees (0 to 180)
         this.MOVE_SPEED = 3; // Horizontal movement speed
         this.UPWARD_BOOST_MULTIPLIER = 1.5; // Exaggerate upward component of bounce
-        this.MINI_BOOST_POWER = 7.2; // Power of mini boosts
+        this.MINI_BOOST_POWER = 9.28; // Power of mini boosts (7.2 * 1.15 = 8.28, then +1.0 = 9.28)
 
         // Ground level
         this.GROUND_Y = 550;
@@ -31,6 +33,7 @@ class Game {
 
         // Input handling
         this.keys = {};
+        this.spaceChargeStartTime = null; // Track when space key was pressed for charging
         this.setupInput();
 
         // Animation loop
@@ -43,12 +46,77 @@ class Game {
             this.keys[e.code] = true;
             if (e.code === 'Space' && this.gameStarted && !this.winner) {
                 e.preventDefault();
-                this.handleBounce();
+                // Start charging the bounce when space is pressed
+                if (this.spaceChargeStartTime === null) {
+                    this.spaceChargeStartTime = Date.now();
+                }
+                // Enter active bouncing mode when space is pressed (arrow appears and oscillates 20-160°)
+                const player = this.players.get(this.localPlayerId);
+                if (player && player.grounded && !player.arrowActiveMode) {
+                    // Seamless transition: continue from current dormant angle
+                    // Get current angle in dormant mode (50-130°)
+                    const currentDormantNormalized = (1 - Math.cos(player.arrowPhase)) / 2; // 0 to 1
+                    const dormantMin = 5 * Math.PI / 18; // 50°
+                    const dormantMax = 13 * Math.PI / 18; // 130°
+                    const currentDormantAngle = dormantMin + currentDormantNormalized * (dormantMax - dormantMin);
+                    const currentDormantAngleDeg = currentDormantAngle * 180 / Math.PI;
+
+                    // Active mode range (20-160°)
+                    const activeMin = Math.PI / 9; // 20°
+                    const activeMax = 8 * Math.PI / 9; // 160°
+
+                    // Find what normalized value in active mode produces the current angle
+                    // We want to continue from the current angle, so find normalized that gives us currentDormantAngle
+                    // activeMin + normalized * (activeMax - activeMin) = currentDormantAngle
+                    // normalized = (currentDormantAngle - activeMin) / (activeMax - activeMin)
+                    const targetNormalized = (currentDormantAngle - activeMin) / (activeMax - activeMin);
+
+                    // Now find the phase that produces this normalized value in active mode
+                    // normalized = (1 - cos(phase)) / 2
+                    // So: cos(phase) = 1 - 2 * normalized
+                    const cosValue = 1 - 2 * targetNormalized;
+                    let newPhase = Math.acos(Math.max(-1, Math.min(1, cosValue)));
+
+                    // For active mode, phase should be in [0, π] range (maps to 20° to 160°)
+                    // Direction determines initial velocity, not phase range
+                    // Ensure phase is in valid range
+                    newPhase = Math.max(0, Math.min(Math.PI, newPhase));
+
+                    player.arrowPhase = newPhase;
+                    player.arrowActiveMode = true;
+                    // Initialize phase velocity based on direction
+                    // For RIGHT: start increasing (towards π/160°)
+                    // For LEFT: start decreasing (towards 0/20°)
+                    player.arrowPhaseVelocity = player.arrowOscillationDirection === 1 ? 1 : -1;
+
+                    // Verify the transition produces the correct angle
+                    let verifyEffectivePhase = newPhase;
+                    if (player.arrowOscillationDirection === -1) {
+                        verifyEffectivePhase = (2 * Math.PI) - (newPhase % (2 * Math.PI));
+                    }
+                    const verifyNormalized = (1 - Math.cos(verifyEffectivePhase)) / 2;
+                    const verifyAngle = activeMin + verifyNormalized * (activeMax - activeMin);
+                    const verifyAngleDeg = verifyAngle * 180 / Math.PI;
+
+                    const oscDir = player.arrowOscillationDirection === 1 ? 'CLOCKWISE (90°→160°)' : 'COUNTER-CLOCKWISE (90°→20°)';
+
+                } else if (player && player.grounded) {
+                    // Already in active mode, just ensure it stays active
+                    player.arrowActiveMode = true;
+                }
             }
         });
 
         window.addEventListener('keyup', (e) => {
             this.keys[e.code] = false;
+            if (e.code === 'Space' && this.gameStarted && !this.winner) {
+                e.preventDefault();
+                // Execute bounce when space is released, with strength based on charge time
+                if (this.spaceChargeStartTime !== null) {
+                    this.handleBounce();
+                    this.spaceChargeStartTime = null; // Reset charge
+                }
+            }
         });
     }
 
@@ -87,7 +155,13 @@ class Game {
             grounded: false, // Start ungrounded so gravity applies immediately from game start
             arrowAngle: -Math.PI / 2, // Start pointing straight up (90°)
             arrowPhase: initialArrowPhase,
-            miniBoostsRemaining: 3 // Track mini boosts available (limited to 3)
+            miniBoostsRemaining: 3, // Track mini boosts available (limited to 3)
+            arrowFrozenUntil: 0, // Timestamp until which arrow oscillation is frozen
+            arrowActiveMode: false, // false = dormant (50-130°), true = active (20-160°)
+            arrowOscillationDirection: 1, // 1 = right (90→160), -1 = left (90→20)
+            arrowPhaseVelocity: 1, // 1 = increasing phase, -1 = decreasing phase (for oscillation)
+            dormantLandingTime: 0, // Timestamp when player entered dormant state (for debug logging)
+            lastDormantLogTime: 0 // Last time we logged dormant angle (to log every 0.33s)
         });
 
     }
@@ -134,11 +208,20 @@ class Game {
         const player = this.players.get(this.localPlayerId);
         if (!player || this.winner) return;
 
+        // Calculate bounce strength based on charge time
+        let bounceStrength = this.MIN_BOUNCE_POWER; // Default to minimum
+        if (this.spaceChargeStartTime !== null) {
+            const chargeTime = Date.now() - this.spaceChargeStartTime;
+            const chargeRatio = Math.min(chargeTime / this.MAX_CHARGE_TIME, 1.0); // Clamp to 0-1
+            // Interpolate between min and max bounce power based on charge
+            bounceStrength = this.MIN_BOUNCE_POWER + (this.BOUNCE_POWER - this.MIN_BOUNCE_POWER) * chargeRatio;
+        }
+
         if (player.grounded) {
             // Normal bounce from ground with exaggerated upward component
             const angle = player.arrowAngle;
-            const baseVelocityX = Math.cos(angle) * this.BOUNCE_POWER;
-            const baseVelocityY = Math.sin(angle) * this.BOUNCE_POWER;
+            const baseVelocityX = Math.cos(angle) * bounceStrength;
+            const baseVelocityY = Math.sin(angle) * bounceStrength;
 
             // Only apply upward boost if angle is NOT near straight up (90°)
             // Apply boost when angle is 20° or more away from straight up
@@ -164,8 +247,10 @@ class Game {
             // Send bounce event to server
             this.network.sendBounce();
         } else if (player.miniBoostsRemaining > 0) {
-            // Mini boost in air
-            player.velocity.y -= this.MINI_BOOST_POWER; // Negative y is upward in canvas
+            // Mini boost in air - also use charge system
+            // Scale mini boost power based on charge (but keep it smaller than ground bounce)
+            const miniBoostStrength = this.MINI_BOOST_POWER * (bounceStrength / this.BOUNCE_POWER);
+            player.velocity.y -= miniBoostStrength; // Negative y is upward in canvas
             player.miniBoostsRemaining--;
 
             // Send state update to sync with server
@@ -197,6 +282,16 @@ class Game {
         }
     }
 
+    // Freeze arrow oscillation for a player for the given duration (ms)
+    freezeArrowFor(playerId, durationMs) {
+        const player = this.players.get(playerId);
+        if (!player) return;
+        const now = Date.now();
+        const until = now + durationMs;
+        // If already frozen longer, keep the longer freeze
+        player.arrowFrozenUntil = Math.max(player.arrowFrozenUntil || 0, until);
+    }
+
     update(deltaTime) {
         if (!this.gameStarted || this.winner) return;
 
@@ -210,6 +305,8 @@ class Game {
             // IMPORTANT: Store grounded state at the VERY START of the frame
             // This is the state from the previous frame, before any updates
             const wasGroundedAtStart = player.grounded;
+            // Store velocity before collision checks (needed to determine landing direction)
+            const velocityBeforeCollision = { x: player.velocity.x, y: player.velocity.y };
 
             // Update physics - gravity applies from game start for all players
             // Apply gravity always (ground will counteract it if player is grounded)
@@ -226,9 +323,9 @@ class Game {
             // Use the grounded state from the start of the frame (previous frame's state)
             let isOnBlock = false;
             if (this.customLevel && this.customLevel.blocks && this.customLevel.blocks.length > 0) {
-                isOnBlock = this.checkBlockCollision(player, playerId, wasGroundedAtStart);
+                isOnBlock = this.checkBlockCollision(player, playerId, wasGroundedAtStart, velocityBeforeCollision);
             }
-            
+
             // If player was grounded on a block in previous frame but collision check says not on block,
             // they might be between blocks or collision detection is unstable - preserve grounded state
             // This prevents flickering when moving between adjacent blocks
@@ -241,7 +338,7 @@ class Game {
                 const scaleY = this.canvas.height / editorTotalSize;
                 const ovalHeight = 50;
                 const playerBottom = player.position.y + ovalHeight / 2;
-                
+
                 for (const block of this.customLevel.blocks) {
                     const blockY = block.y * editorBlockSize * scaleY;
                     const blockTop = blockY;
@@ -268,10 +365,43 @@ class Game {
                 player.grounded = true;
 
                 if (!wasGrounded) {
-                    // Just landed - reset arrow to point straight up to prevent rotation glitch
+                    // Just landed - enter dormant state (arrow hidden, oscillates 50-130°)
+                    player.arrowActiveMode = false;
+                    player.dormantLandingTime = Date.now(); // Track landing time for debug logs
+
+                    // Determine oscillation direction based on horizontal velocity BEFORE landing
+                    // Use velocityBeforeCollision since velocity may have been reset to 0
+                    // Positive velocity (moving right) = rotate 90→20 (counter-clockwise, decreasing phase)
+                    // Negative velocity (moving left) = rotate 90→160 (clockwise, increasing phase)
+                    const velocityDir = velocityBeforeCollision.x > 0.1 ? 'RIGHT' : (velocityBeforeCollision.x < -0.1 ? 'LEFT' : 'NONE');
+                    console.log(`[GROUND LANDING] Player ${playerId}: Directional velocity = ${velocityDir}`);
+
+                    if (velocityBeforeCollision.x > 0.1) {
+                        // Moving right - rotate counter-clockwise from 90° to 50° (decrease phase)
+                        player.arrowOscillationDirection = -1;
+                        player.arrowPhase = Math.PI / 2;
+                        player.arrowPhaseVelocity = -1; // Start decreasing towards 0 (50°)
+                        console.log(`[GROUND LANDING] Player ${playerId}: Starting oscillation = -90 (counter-clockwise, 90°→50°), Phase set to ${player.arrowPhase.toFixed(3)}`);
+
+                    } else if (velocityBeforeCollision.x < -0.1) {
+                        // Moving left - rotate clockwise from 90° to 130° (increase phase)
+                        player.arrowOscillationDirection = 1;
+                        player.arrowPhase = Math.PI / 2;
+                        player.arrowPhaseVelocity = 1; // Start increasing towards π (130°)
+                        console.log(`[GROUND LANDING] Player ${playerId}: Starting oscillation = +90 (clockwise, 90°→130°), Phase set to ${player.arrowPhase.toFixed(3)}`);
+
+                    } else {
+                        // No significant horizontal velocity - default to right (counter-clockwise)
+                        player.arrowOscillationDirection = -1;
+                        player.arrowPhase = Math.PI / 2;
+                        player.arrowPhaseVelocity = -1; // Start decreasing towards 0 (50°)
+                        console.log(`[GROUND LANDING] Player ${playerId}: Starting oscillation = -90 (counter-clockwise, default), Phase set to ${player.arrowPhase.toFixed(3)}`);
+
+                    }
+
+                    // Reset arrow to point straight up to prevent rotation glitch
                     // This ensures the oval stays upright like an egg when landing
-                    player.arrowPhase = Math.PI / 2;
-                    player.arrowAngle = -Math.PI / 2; // Point straight up
+                    player.arrowAngle = -Math.PI / 2; // Point straight up (90°)
                     player.miniBoostsRemaining = 3; // Reset mini boosts when landing
                 }
 
@@ -318,7 +448,7 @@ class Game {
                     // This prevents the player from sliding when they land with horizontal velocity
                     const movingFriction = 0.98; // Slight friction even when moving
                     player.velocity.x *= movingFriction;
-                    
+
                     // Stop very small velocities
                     if (Math.abs(player.velocity.x) < 0.05) {
                         player.velocity.x = 0;
@@ -338,16 +468,110 @@ class Game {
 
             // Update arrow oscillation if grounded (AFTER collision checks, so landing resets happen first)
             if (player.grounded) {
-                player.arrowPhase += this.ARROW_OSCILLATION_SPEED * deltaTime;
-                // Oscillate from 20 degrees to 160 degrees
-                // Use (1 - cos) / 2 to map from 0 to 1, then scale to 20° to 160°
-                // Range: 20° (π/9) to 160° (8π/9) = 140° range
-                // Negate to make it work with canvas coordinates (y-axis flipped)
-                const normalized = (1 - Math.cos(player.arrowPhase)) / 2; // 0 to 1
-                const minAngle = Math.PI / 9; // 20°
-                const maxAngle = 8 * Math.PI / 9; // 160°
-                const normalizedAngle = minAngle + normalized * (maxAngle - minAngle); // 20° to 160°
-                player.arrowAngle = -normalizedAngle;
+                const now = Date.now();
+                // Only oscillate if not currently frozen (e.g., just got bounced on)
+                if (!player.arrowFrozenUntil || now >= player.arrowFrozenUntil) {
+                    // Active mode oscillates at 58.8% of original speed (49% * 1.2 = 58.8% after 20% increase)
+                    // Dormant mode oscillates 10% faster than normal
+                    const oscillationSpeed = player.arrowActiveMode 
+                        ? this.ARROW_OSCILLATION_SPEED * 0.588  // Increased by 20% from 0.49
+                        : this.ARROW_OSCILLATION_SPEED * 1.1;   // 10% faster in dormant mode
+
+                    // Oscillate phase for active mode - full range 20° to 160°
+                    if (player.arrowActiveMode) {
+                        // Initialize phase velocity if not set
+                        if (player.arrowPhaseVelocity === undefined) {
+                            // For RIGHT: start increasing (towards 160°)
+                            // For LEFT: start decreasing (towards 20°)
+                            player.arrowPhaseVelocity = player.arrowOscillationDirection === 1 ? 1 : -1;
+                        }
+
+                        // Full oscillation range: phase goes from 0 to π (which maps to 20° to 160°)
+                        player.arrowPhase += oscillationSpeed * deltaTime * player.arrowPhaseVelocity;
+
+                        // Wrap at boundaries: when phase hits 0 or π, reverse direction
+                        if (player.arrowPhase >= Math.PI) {
+                            player.arrowPhase = Math.PI;
+                            player.arrowPhaseVelocity = -1; // Reverse direction (start decreasing)
+                        } else if (player.arrowPhase <= 0) {
+                            player.arrowPhase = 0;
+                            player.arrowPhaseVelocity = 1; // Reverse direction (start increasing)
+                        }
+                    } else {
+                        // Dormant mode: oscillate phase from 0 to π (maps to 50° to 130°)
+                        // Use arrowPhaseVelocity to control direction
+                        player.arrowPhase += oscillationSpeed * deltaTime * player.arrowPhaseVelocity;
+                        
+                        // Wrap at boundaries: when phase hits 0 or π, reverse direction
+                        if (player.arrowPhase >= Math.PI) {
+                            player.arrowPhase = Math.PI;
+                            player.arrowPhaseVelocity = -1; // Reverse direction (start decreasing)
+                        } else if (player.arrowPhase <= 0) {
+                            player.arrowPhase = 0;
+                            player.arrowPhaseVelocity = 1; // Reverse direction (start increasing)
+                        }
+                        
+                        // Safety clamp to ensure phase stays within bounds
+                        if (player.arrowPhase > Math.PI) {
+                            player.arrowPhase = Math.PI;
+                        } else if (player.arrowPhase < 0) {
+                            player.arrowPhase = 0;
+                        }
+                    }
+
+                    if (player.arrowActiveMode) {
+                        // Active bouncing mode: oscillate from 20 degrees to 160 degrees
+                        // Direction determines which way it rotates from 90°
+                        // Direction = 1: 90° → 160° (right/clockwise)
+                        // Direction = -1: 90° → 20° (left/counter-clockwise)
+
+                        // For active mode, phase oscillates in full 0 to π range (20° to 160°)
+                        // Direction only determines initial velocity, not phase calculation
+                        let effectivePhase = player.arrowPhase;
+
+                        const normalized = (1 - Math.cos(effectivePhase)) / 2; // 0 to 1
+                        const minAngle = Math.PI / 9; // 20°
+                        const maxAngle = 8 * Math.PI / 9; // 160°
+                        const normalizedAngle = minAngle + normalized * (maxAngle - minAngle); // 20° to 160°
+                        player.arrowAngle = -normalizedAngle;
+
+                        // Debug log occasionally to track oscillation
+                        if (player.id === this.localPlayerId && Math.floor(Date.now() / 1000) % 2 === 0) {
+                            const angleDeg = normalizedAngle * 180 / Math.PI;
+                            const direction = player.arrowOscillationDirection === 1 ? 'RIGHT' : 'LEFT';
+
+                        }
+                    } else {
+                        // Dormant state: oscillate from 50 degrees to 130 degrees
+                        // Range: 50° (5π/18) to 130° (13π/18) = 80° range
+                        const normalized = (1 - Math.cos(player.arrowPhase)) / 2; // 0 to 1
+                        const minAngle = 5 * Math.PI / 18; // 50°
+                        const maxAngle = 13 * Math.PI / 18; // 130°
+                        const normalizedAngle = minAngle + normalized * (maxAngle - minAngle); // 50° to 130°
+                        player.arrowAngle = -normalizedAngle;
+                        
+                        // Debug log: show angle every 0.2 seconds (1/5th of a second) for 2 seconds after landing
+                        if (player.dormantLandingTime && player.id === this.localPlayerId) {
+                            const now = Date.now();
+                            const timeSinceLanding = now - player.dormantLandingTime;
+                            
+                            if (timeSinceLanding < 2000) { // Within 2 seconds of landing
+                                // Log every 0.2 seconds (200ms)
+                                const timeSinceLastLog = now - (player.lastDormantLogTime || player.dormantLandingTime);
+                                if (timeSinceLastLog >= 200) {
+                                    const angleDeg = normalizedAngle * 180 / Math.PI;
+                                    const oscDir = player.arrowPhaseVelocity === -1 ? '-90' : '+90';
+                                    console.log(`[DORMANT OSC] Player ${playerId}: Angle = ${angleDeg.toFixed(1)}°, Phase = ${player.arrowPhase.toFixed(3)}, Direction = ${oscDir}`);
+                                    player.lastDormantLogTime = now;
+                                }
+                            } else {
+                                // Clear landing time after 2 seconds to stop logging
+                                player.dormantLandingTime = 0;
+                                player.lastDormantLogTime = 0;
+                            }
+                        }
+                    }
+                }
             }
 
             // Send state update for local player
@@ -465,7 +689,7 @@ class Game {
         this.customLevel = level;
     }
 
-    checkBlockCollision(player, playerId, wasGroundedBefore) {
+    checkBlockCollision(player, playerId, wasGroundedBefore, velocityBeforeCollision) {
         if (!this.customLevel || !this.customLevel.blocks) return false;
 
         const editorGridSize = 20;
@@ -482,13 +706,13 @@ class Game {
         const playerBottom = player.position.y + ovalHeight / 2;
 
         let isOnTopOfBlock = false;
-        
+
         // Store the actual grounded state BEFORE we check any blocks
         // This is the state from the previous frame, which tells us if we're already on a block
         // Use the parameter passed in (wasGroundedBefore) which is from the start of the frame
         // This is more reliable than checking player.grounded which might have been modified
         const actuallyWasGrounded = wasGroundedBefore;
-        
+
         // IMPORTANT: If player was already grounded, they should still be grounded unless we detect otherwise
         // This prevents the grounded state from being lost between frames
 
@@ -544,8 +768,35 @@ class Game {
                             // Treat platforms exactly like ground - check if player was actually grounded before
                             // Use actuallyWasGrounded (captured at start of function) instead of wasGroundedBefore parameter
                             if (!actuallyWasGrounded) {
-                                // FIRST LANDING on platform - log this important event
-                                console.log(`[PLATFORM LANDING] Player ${playerId} FIRST landing on block - wasGrounded: ${actuallyWasGrounded}, resetting arrow phase from ${player.arrowPhase.toFixed(3)} to ${(Math.PI / 2).toFixed(3)}`);
+                                // FIRST LANDING on platform - enter dormant state (arrow hidden, oscillates 50-130°)
+                                player.arrowActiveMode = false;
+                                player.dormantLandingTime = Date.now(); // Track landing time for debug logs
+
+                                // Determine oscillation direction based on horizontal velocity BEFORE landing
+                                // Use velocityBeforeCollision since velocity may have been modified
+                                const velocityDir = velocityBeforeCollision.x > 0.1 ? 'RIGHT' : (velocityBeforeCollision.x < -0.1 ? 'LEFT' : 'NONE');
+                                console.log(`[PLATFORM LANDING] Player ${playerId}: Directional velocity = ${velocityDir}`);
+
+                                if (velocityBeforeCollision.x > 0.1) {
+                                    player.arrowOscillationDirection = -1; // Right: 90→50 (counter-clockwise)
+                                    player.arrowPhase = Math.PI / 2;
+                                    player.arrowPhaseVelocity = -1; // Start decreasing towards 0 (50°)
+                                    console.log(`[PLATFORM LANDING] Player ${playerId}: Starting oscillation = -90 (counter-clockwise, 90°→50°), Phase set to ${player.arrowPhase.toFixed(3)}`);
+
+                                } else if (velocityBeforeCollision.x < -0.1) {
+                                    player.arrowOscillationDirection = 1; // Left: 90→130 (clockwise)
+                                    player.arrowPhase = Math.PI / 2;
+                                    player.arrowPhaseVelocity = 1; // Start increasing towards π (130°)
+                                    console.log(`[PLATFORM LANDING] Player ${playerId}: Starting oscillation = +90 (clockwise, 90°→130°), Phase set to ${player.arrowPhase.toFixed(3)}`);
+
+                                } else {
+                                    player.arrowOscillationDirection = -1; // Default to right (counter-clockwise)
+                                    player.arrowPhase = Math.PI / 2;
+                                    player.arrowPhaseVelocity = -1; // Start decreasing towards 0 (50°)
+                                    console.log(`[PLATFORM LANDING] Player ${playerId}: Starting oscillation = -90 (counter-clockwise, default), Phase set to ${player.arrowPhase.toFixed(3)}`);
+
+                                }
+
                                 // Just landed - reset arrow to point straight up to prevent rotation glitch
                                 // This ensures the oval stays upright like an egg when landing
                                 player.arrowPhase = Math.PI / 2;
@@ -554,7 +805,7 @@ class Game {
                             } else {
                                 // Already on platform - log if arrow phase is being reset incorrectly (bug detection)
                                 if (Math.abs(player.arrowPhase - Math.PI / 2) < 0.01) {
-                                    console.log(`[PLATFORM BUG] Player ${playerId} already on block but arrow phase is at reset value! Phase: ${player.arrowPhase.toFixed(3)}, wasGrounded: ${actuallyWasGrounded}`);
+
                                 }
                             }
 
@@ -581,6 +832,14 @@ class Game {
 
     drawPlayer(player) {
         const { position, arrowAngle, grounded, side } = player;
+
+        // Calculate charge progress if space is being held (for local player only)
+        let chargeProgress = 0; // 0 to 1
+        if (player.id === this.localPlayerId && this.spaceChargeStartTime !== null && grounded) {
+            const chargeTime = Date.now() - this.spaceChargeStartTime;
+            chargeProgress = Math.min(chargeTime / this.MAX_CHARGE_TIME, 1.0); // Clamp to 0-1
+        }
+
         const ovalWidth = 40;
         const ovalHeight = 50;
 
@@ -662,8 +921,8 @@ class Game {
         this.ctx.lineWidth = 2;
         this.ctx.strokeRect(-hitboxWidth / 2, ovalHeight / 2 - hitboxHeight, hitboxWidth, hitboxHeight);
 
-        // Draw arrow when grounded
-        if (grounded) {
+        // Draw arrow when grounded AND in active mode (hidden in dormant state)
+        if (grounded && player.arrowActiveMode) {
             this.ctx.restore();
             this.ctx.save();
 
@@ -679,22 +938,56 @@ class Game {
             this.ctx.translate(position.x + edgeX, position.y + edgeY);
             this.ctx.rotate(arrowAngle);
 
-            // Draw arrow
-            this.ctx.strokeStyle = 'white';
-            this.ctx.lineWidth = 3;
-            this.ctx.beginPath();
-            this.ctx.moveTo(0, 0);
-            this.ctx.lineTo(60, 0);
-            this.ctx.stroke();
+            // Draw arrow with charge indicator
+            const arrowLength = 60;
+            const isCharging = player.id === this.localPlayerId && this.spaceChargeStartTime !== null;
 
-            // Arrowhead
-            this.ctx.beginPath();
-            this.ctx.moveTo(60, 0);
-            this.ctx.lineTo(50, -8);
-            this.ctx.lineTo(50, 8);
-            this.ctx.closePath();
-            this.ctx.fillStyle = 'white';
-            this.ctx.fill();
+            if (isCharging && chargeProgress > 0) {
+                // Draw charged portion (white) - fills from base to tip based on charge
+                const chargedLength = arrowLength * chargeProgress;
+                this.ctx.strokeStyle = 'white';
+                this.ctx.lineWidth = 3;
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, 0);
+                this.ctx.lineTo(chargedLength, 0);
+                this.ctx.stroke();
+
+                // Draw uncharged portion (light grey) - from charged point to tip
+                if (chargeProgress < 1.0) {
+                    this.ctx.strokeStyle = '#888888'; // Light grey
+                    this.ctx.lineWidth = 3;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(chargedLength, 0);
+                    this.ctx.lineTo(arrowLength, 0);
+                    this.ctx.stroke();
+                }
+
+                // Arrowhead - white if fully charged, grey if partially charged
+                this.ctx.beginPath();
+                this.ctx.moveTo(arrowLength, 0);
+                this.ctx.lineTo(arrowLength - 10, -8);
+                this.ctx.lineTo(arrowLength - 10, 8);
+                this.ctx.closePath();
+                this.ctx.fillStyle = chargeProgress >= 1.0 ? 'white' : '#888888';
+                this.ctx.fill();
+            } else {
+                // Normal arrow (white) when not charging
+                this.ctx.strokeStyle = 'white';
+                this.ctx.lineWidth = 3;
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, 0);
+                this.ctx.lineTo(arrowLength, 0);
+                this.ctx.stroke();
+
+                // Arrowhead
+                this.ctx.beginPath();
+                this.ctx.moveTo(arrowLength, 0);
+                this.ctx.lineTo(arrowLength - 10, -8);
+                this.ctx.lineTo(arrowLength - 10, 8);
+                this.ctx.closePath();
+                this.ctx.fillStyle = 'white';
+                this.ctx.fill();
+            }
         }
 
         this.ctx.restore();

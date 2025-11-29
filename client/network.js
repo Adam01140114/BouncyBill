@@ -101,6 +101,10 @@ class NetworkManager {
         this.send('playAgain');
     }
 
+    skipCountdown() {
+        this.send('skipCountdown');
+    }
+
     disconnect() {
         if (this.ws) {
             this.ws.close();
