@@ -16,6 +16,7 @@
                 <button id="createRoomBtn" class="btn btn-primary">Create Room</button>
                 <button id="joinRoomBtn" class="btn btn-secondary">Join Room</button>
                 <button id="myLevelsBtn" class="btn btn-secondary">My Levels</button>
+                <button id="settingsBtn" class="btn btn-secondary">Settings</button>
             </div>
         </div>
     </div>
@@ -116,6 +117,75 @@
                     <button id="cancelEditorBtn" class="btn btn-secondary">Cancel</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Settings Module -->
+    <div id="settingsModule" class="screen">
+        <div class="container">
+            <h2>Game Settings</h2>
+            <div class="settings-content">
+                <div class="setting-item">
+                    <label for="playerSize">Player Size Multiplier: <span id="playerSizeValue">1.0</span></label>
+                    <input type="range" id="playerSize" class="setting-slider" step="0.1" min="0.5" max="7.0" value="1.0">
+                    <p class="setting-description">Controls the overall size of the player (default: 1.0, current: 1.2 = 20% larger)</p>
+                </div>
+                <div class="setting-item">
+                    <label for="baseOscillationSpeed">Base Oscillation Speed: <span id="baseOscillationSpeedValue">0.036</span></label>
+                    <input type="range" id="baseOscillationSpeed" class="setting-slider" step="0.001" min="0.01" max="0.1" value="0.036">
+                    <p class="setting-description">Base speed used for all oscillation calculations</p>
+                </div>
+                <div class="setting-item">
+                    <label for="activeOscillationSpeed">Active Oscillation Speed Multiplier: <span id="activeOscillationSpeedValue">1.1</span></label>
+                    <input type="range" id="activeOscillationSpeed" class="setting-slider" step="0.01" min="0.1" max="3.0" value="1.1">
+                    <p class="setting-description">Multiplier for active mode (30-150° range). Final speed: <span id="activeFinalSpeed">0.0396</span></p>
+                </div>
+                <div class="setting-item">
+                    <label for="dormantOscillationSpeed">Dormant Oscillation Speed Multiplier: <span id="dormantOscillationSpeedValue">1.1</span></label>
+                    <input type="range" id="dormantOscillationSpeed" class="setting-slider" step="0.01" min="0.1" max="3.0" value="1.1">
+                    <p class="setting-description">Multiplier for dormant mode (50-130° range). Final speed: <span id="dormantFinalSpeed">0.0396</span></p>
+                </div>
+                <div class="setting-item">
+                    <label>Dormant Oscillation Angle Range:</label>
+                    <div class="angle-range-inputs">
+                        <input type="number" id="dormantMinAngle" class="setting-input angle-input" step="1" min="0" max="180" value="50" placeholder="Min">
+                        <span class="angle-separator">to</span>
+                        <input type="number" id="dormantMaxAngle" class="setting-input angle-input" step="1" min="0" max="180" value="130" placeholder="Max">
+                        <span class="angle-unit">degrees</span>
+                    </div>
+                    <p class="setting-description">Angle range for dormant mode oscillation</p>
+                </div>
+                <div class="setting-item">
+                    <label>Active Oscillation Angle Range:</label>
+                    <div class="angle-range-inputs">
+                        <input type="number" id="activeMinAngle" class="setting-input angle-input" step="1" min="0" max="180" value="30" placeholder="Min">
+                        <span class="angle-separator">to</span>
+                        <input type="number" id="activeMaxAngle" class="setting-input angle-input" step="1" min="0" max="180" value="150" placeholder="Max">
+                        <span class="angle-unit">degrees</span>
+                    </div>
+                    <p class="setting-description">Angle range for active mode oscillation</p>
+                </div>
+                <div class="setting-item">
+                    <label for="miniBoostStrength">Mini Boost Strength: <span id="miniBoostStrengthValue">10.21</span></label>
+                    <input type="range" id="miniBoostStrength" class="setting-slider" step="0.1" min="5.0" max="20.0" value="10.21">
+                    <p class="setting-description">Controls the power of mid-air mini boosts</p>
+                </div>
+                <div class="setting-item">
+                    <label for="minBouncePower">Minimum Bounce Power: <span id="minBouncePowerValue">6.0</span></label>
+                    <input type="range" id="minBouncePower" class="setting-slider" step="0.1" min="1.0" max="15.0" value="6.0">
+                    <p class="setting-description">Minimum bounce strength when lightly tapping space/mouse</p>
+                </div>
+                <div class="setting-item">
+                    <label for="maxBouncePower">Maximum Bounce Power: <span id="maxBouncePowerValue">11.25</span></label>
+                    <input type="range" id="maxBouncePower" class="setting-slider" step="0.1" min="5.0" max="25.0" value="11.25">
+                    <p class="setting-description">Maximum bounce strength when fully charging</p>
+                </div>
+            </div>
+            <div class="button-group">
+                <button id="saveSettingsBtn" class="btn btn-primary">Save Settings</button>
+                <button id="closeSettingsBtn" class="btn btn-secondary">Close</button>
+            </div>
+            <p id="settingsMessage" class="settings-message"></p>
         </div>
     </div>
 

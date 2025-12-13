@@ -30,6 +30,20 @@ class Game {
 
         // Arrow oscillation
         this.arrowPhase = 0;
+        
+        // Oscillation speed settings (can be updated via settings)
+        this.ARROW_OSCILLATION_SPEED = 0.036; // Base speed (can be updated)
+        this.activeOscillationMultiplier = 1.1;
+        this.dormantOscillationMultiplier = 1.1;
+        
+        // Oscillation angle ranges (can be updated via settings)
+        this.dormantMinAngle = 50; // degrees
+        this.dormantMaxAngle = 130; // degrees
+        this.activeMinAngle = 30; // degrees
+        this.activeMaxAngle = 150; // degrees
+        
+        // Player size multiplier (can be updated via settings)
+        this.playerSizeMultiplier = 1.2; // Default: 20% larger (1.2)
 
         // Input handling
         this.keys = {};
@@ -39,6 +53,25 @@ class Game {
         // Animation loop
         this.lastTime = 0;
         this.animationFrameId = null;
+
+        // Sprite sheet
+        this.spriteSheet = new Image();
+        this.spriteSheet.src = 'Spritesheets/bob.png';
+        this.spriteSheetLoaded = false;
+        this.spriteSheet.onload = () => {
+            console.log('Sprite sheet loaded:', this.spriteSheet.width, 'x', this.spriteSheet.height);
+            this.spriteSheetLoaded = true;
+            // 14x4 inches, 4 frames horizontally
+            // Calculate frame dimensions based on actual image size
+            this.spriteFrames = 4;
+            this.spriteFrameWidth = this.spriteSheet.width / 4; // 4 frames horizontally
+            this.spriteFrameHeight = this.spriteSheet.height; // Full height (1 row)
+            console.log('Sprite frame size:', this.spriteFrameWidth, 'x', this.spriteFrameHeight);
+        };
+        this.spriteSheet.onerror = () => {
+            console.error('Failed to load sprite sheet');
+            this.spriteSheetLoaded = false;
+        };
     }
 
     setupInput() {
@@ -100,19 +133,19 @@ class Game {
         if (this.spaceChargeStartTime === null) {
             this.spaceChargeStartTime = Date.now();
         }
-        // Enter active bouncing mode (arrow appears and oscillates 20-160°)
+        // Enter active bouncing mode (arrow appears and oscillates 30-150°)
         const player = this.players.get(this.localPlayerId);
         if (player && player.grounded && !player.arrowActiveMode) {
             // Seamless transition: continue from current dormant angle
-            // Get current angle in dormant mode (50-130°)
+            // Get current angle in dormant mode
             const currentDormantNormalized = (1 - Math.cos(player.arrowPhase)) / 2; // 0 to 1
-            const dormantMin = 5 * Math.PI / 18; // 50°
-            const dormantMax = 13 * Math.PI / 18; // 130°
+            const dormantMin = this.dormantMinAngle * Math.PI / 180; // Convert to radians
+            const dormantMax = this.dormantMaxAngle * Math.PI / 180; // Convert to radians
             const currentDormantAngle = dormantMin + currentDormantNormalized * (dormantMax - dormantMin);
 
-            // Active mode range (20-160°)
-            const activeMin = Math.PI / 9; // 20°
-            const activeMax = 8 * Math.PI / 9; // 160°
+            // Active mode range
+            const activeMin = this.activeMinAngle * Math.PI / 180; // Convert to radians
+            const activeMax = this.activeMaxAngle * Math.PI / 180; // Convert to radians
 
             // Find what normalized value in active mode produces the current angle
             const targetNormalized = (currentDormantAngle - activeMin) / (activeMax - activeMin);
@@ -121,13 +154,14 @@ class Game {
             const cosValue = 1 - 2 * targetNormalized;
             let newPhase = Math.acos(Math.max(-1, Math.min(1, cosValue)));
 
-            // For active mode, phase should be in [0, π] range (maps to 20° to 160°)
+            // For active mode, phase should be in [0, π] range (maps to 30° to 150°)
             newPhase = Math.max(0, Math.min(Math.PI, newPhase));
 
             player.arrowPhase = newPhase;
             player.arrowActiveMode = true;
-            // Initialize phase velocity based on direction
-            player.arrowPhaseVelocity = player.arrowOscillationDirection === 1 ? 1 : -1;
+            // Preserve the current phase velocity direction to maintain seamless rotation
+            // Don't reset it based on arrowOscillationDirection - keep the current movement direction
+            // arrowPhaseVelocity is already set correctly from dormant mode
         } else if (player && player.grounded) {
             // Already in active mode, just ensure it stays active
             player.arrowActiveMode = true;
@@ -161,7 +195,7 @@ class Game {
     addPlayer(playerId, side, position) {
         const initialPosition = position || { 
             x: side === 'left' ? 150 : 650, 
-            y: this.GROUND_Y - 25 // Center of oval (ovalHeight/2 = 25)
+            y: this.GROUND_Y // Bottom of oval (feet at ground level)
         };
 
         // Start arrow phase so arrow points straight up (90°) initially
@@ -179,14 +213,17 @@ class Game {
             arrowPhase: initialArrowPhase,
             miniBoostsRemaining: 3, // Track mini boosts available (limited to 3)
             arrowFrozenUntil: 0, // Timestamp until which arrow oscillation is frozen
-            arrowActiveMode: false, // false = dormant (50-130°), true = active (20-160°)
+            arrowActiveMode: false, // false = dormant (50-130°), true = active (30-150°)
             arrowOscillationDirection: 1, // 1 = right (90→160), -1 = left (90→20)
             arrowPhaseVelocity: 1, // 1 = increasing phase, -1 = decreasing phase (for oscillation)
             dormantLandingTime: 0, // Timestamp when player entered dormant state (for debug logging)
             lastDormantLogTime: 0, // Last time we logged dormant angle (to log every 0.33s)
             headBounceTime: 0, // Timestamp when player last bounced on head (for debug logging)
             lastHeadBounceLogTime: 0, // Last time we logged head bounce velocity (to log every 0.2s)
-            lastHeadBounceBoostApplied: 0 // Timestamp when head bounce boost was last applied (internal cooldown)
+            lastHeadBounceBoostApplied: 0, // Timestamp when head bounce boost was last applied (internal cooldown)
+            spriteFrame: 0, // Current sprite frame (0-3)
+            spriteAnimationTime: 0, // Time accumulator for sprite animation
+            miniBoostAnimationStart: 0 // Timestamp when mini boost animation started (0 = not animating)
         });
 
     }
@@ -275,8 +312,14 @@ class Game {
             // Mini boost in air - also use charge system
             // Scale mini boost power based on charge (but keep it smaller than ground bounce)
             const miniBoostStrength = this.MINI_BOOST_POWER * (bounceStrength / this.BOUNCE_POWER);
-            player.velocity.y -= miniBoostStrength; // Negative y is upward in canvas
+            // Apply 10% stronger upward velocity
+            player.velocity.y -= miniBoostStrength * 1.1; // Negative y is upward in canvas, 10% stronger
             player.miniBoostsRemaining--;
+
+            // Start mini boost sprite animation: show frame 4 (index 3) for 1/10 of a second, then frame 3 (index 2)
+            player.miniBoostAnimationStart = Date.now();
+            player.spriteFrame = 3; // Start with frame 4 (index 3)
+            console.log(`[MINI BOOST] Started mini boost animation - showing frame 4 (index 3) for 0.1 seconds`);
 
             // Send state update to sync with server
             this.network.sendStateUpdate({
@@ -427,13 +470,12 @@ class Game {
                 const editorTotalSize = editorGridSize * editorBlockSize;
                 const scaleX = this.canvas.width / editorTotalSize;
                 const scaleY = this.canvas.height / editorTotalSize;
-                const ovalHeight = 50;
-                const playerBottom = player.position.y + ovalHeight / 2;
 
                 for (const block of this.customLevel.blocks) {
                     const blockY = block.y * editorBlockSize * scaleY;
                     const blockTop = blockY;
-                    const distanceToBlock = Math.abs(playerBottom - blockTop);
+                    // position.y is now the bottom of the oval (feet)
+                    const distanceToBlock = Math.abs(player.position.y - blockTop);
                     if (distanceToBlock < 5) {
                         // Player is very close to block - preserve grounded state
                         isOnBlock = true;
@@ -444,12 +486,13 @@ class Game {
             }
 
             // Check ground collision (only if not on a block)
-            const ovalHeight = 50;
-            const ovalBottom = player.position.y + ovalHeight / 2;
+            const baseOvalHeight = 50;
+            const ovalHeight = baseOvalHeight * this.playerSizeMultiplier;
 
-            if (!isOnBlock && ovalBottom >= this.GROUND_Y) {
+            if (!isOnBlock && player.position.y >= this.GROUND_Y) {
                 // Ensure player is exactly on the ground, no glitching
-                player.position.y = this.GROUND_Y - ovalHeight / 2;
+                // position.y is now the bottom of the oval (feet)
+                player.position.y = this.GROUND_Y;
                 player.velocity.y = 0;
 
                 const wasGrounded = player.grounded;
@@ -459,6 +502,14 @@ class Game {
                     // Just landed - enter dormant state (arrow hidden, oscillates 50-130°)
                     player.arrowActiveMode = false;
                     player.dormantLandingTime = Date.now(); // Track landing time for debug logs
+                    // Reset sprite animation when entering dormant mode
+                    player.spriteAnimationTime = 0;
+                    player.spriteFrame = 0; // Start at frame 1 (index 0)
+                    // Reset mini boost animation when landing (return to dormant loop)
+                    if (player.miniBoostAnimationStart > 0) {
+                        console.log(`[LANDING] Reset mini boost animation, returning to dormant loop (frame 1-2)`);
+                    }
+                    player.miniBoostAnimationStart = 0;
 
                     // Determine oscillation direction based on horizontal velocity BEFORE landing
                     // Use velocityBeforeCollision since velocity may have been reset to 0
@@ -544,7 +595,8 @@ class Game {
             }
 
             // Boundary collision (left and right walls)
-            const ovalWidth = 40;
+            const baseOvalWidth = 40;
+            const ovalWidth = baseOvalWidth * this.playerSizeMultiplier;
             if (player.position.x - ovalWidth / 2 < 0) {
                 player.position.x = ovalWidth / 2;
                 player.velocity.x *= -0.5; // Bounce off wall
@@ -553,7 +605,32 @@ class Game {
                 player.velocity.x *= -0.5;
             }
 
+            // Handle mini boost animation if active (MUST run for ALL players - grounded or mid-air)
+            // This must be BEFORE the grounded check so it works in mid-air
+            if (player.miniBoostAnimationStart > 0) {
+                const now = Date.now();
+                const timeSinceMiniBoost = now - player.miniBoostAnimationStart;
+                const frame4Duration = 100; // Show frame 4 for 1/10 of a second (100ms)
+                const previousFrame = player.spriteFrame;
+                
+                if (timeSinceMiniBoost < frame4Duration) {
+                    // Show frame 4 (index 3) for 1/10 of a second
+                    player.spriteFrame = 3;
+                    if (player.id === this.localPlayerId && previousFrame !== 3 && timeSinceMiniBoost < 50) {
+                        console.log(`[MINI BOOST] Showing frame 4 (index 3) at ${timeSinceMiniBoost}ms`);
+                    }
+                } else {
+                    // Show frame 3 (index 2) after 1/10 of a second
+                    player.spriteFrame = 2;
+                    if (player.id === this.localPlayerId && previousFrame !== 2 && previousFrame === 3) {
+                        console.log(`[MINI BOOST] Switched to frame 3 (index 2) at ${timeSinceMiniBoost}ms (after 0.1 seconds)`);
+                    }
+                    // Animation continues until player lands (reset in landing logic)
+                }
+            }
+
             // Update arrow oscillation if grounded (AFTER collision checks, so landing resets happen first)
+            // Note: Mini boost animation is handled above and takes priority over sprite animation
             if (player.grounded) {
                 const now = Date.now();
                 // Only oscillate if not currently frozen (e.g., just got bounced on)
@@ -561,19 +638,19 @@ class Game {
                     // Active mode oscillates at 58.8% of original speed (49% * 1.2 = 58.8% after 20% increase)
                     // Dormant mode oscillates 10% faster than normal
                     const oscillationSpeed = player.arrowActiveMode 
-                        ? this.ARROW_OSCILLATION_SPEED * 0.588  // Increased by 20% from 0.49
-                        : this.ARROW_OSCILLATION_SPEED * 1.1;   // 10% faster in dormant mode
+                        ? this.ARROW_OSCILLATION_SPEED * this.activeOscillationMultiplier
+                        : this.ARROW_OSCILLATION_SPEED * this.dormantOscillationMultiplier;
 
-                    // Oscillate phase for active mode - full range 20° to 160°
+                    // Oscillate phase for active mode - full range 30° to 150°
                     if (player.arrowActiveMode) {
                         // Initialize phase velocity if not set
                         if (player.arrowPhaseVelocity === undefined) {
-                            // For RIGHT: start increasing (towards 160°)
-                            // For LEFT: start decreasing (towards 20°)
+                            // For RIGHT: start increasing (towards 150°)
+                            // For LEFT: start decreasing (towards 30°)
                             player.arrowPhaseVelocity = player.arrowOscillationDirection === 1 ? 1 : -1;
                         }
 
-                        // Full oscillation range: phase goes from 0 to π (which maps to 20° to 160°)
+                        // Full oscillation range: phase goes from 0 to π (which maps to 30° to 150°)
                         player.arrowPhase += oscillationSpeed * deltaTime * player.arrowPhaseVelocity;
 
                         // Wrap at boundaries: when phase hits 0 or π, reverse direction
@@ -607,20 +684,27 @@ class Game {
                     }
 
                     if (player.arrowActiveMode) {
-                        // Active bouncing mode: oscillate from 20 degrees to 160 degrees
+                        // Active bouncing mode: oscillate in configured range
                         // Direction determines which way it rotates from 90°
-                        // Direction = 1: 90° → 160° (right/clockwise)
-                        // Direction = -1: 90° → 20° (left/counter-clockwise)
+                        // Direction = 1: 90° → max (right/clockwise)
+                        // Direction = -1: 90° → min (left/counter-clockwise)
 
-                        // For active mode, phase oscillates in full 0 to π range (20° to 160°)
+                        // For active mode, phase oscillates in full 0 to π range
                         // Direction only determines initial velocity, not phase calculation
                         let effectivePhase = player.arrowPhase;
 
                         const normalized = (1 - Math.cos(effectivePhase)) / 2; // 0 to 1
-                        const minAngle = Math.PI / 9; // 20°
-                        const maxAngle = 8 * Math.PI / 9; // 160°
-                        const normalizedAngle = minAngle + normalized * (maxAngle - minAngle); // 20° to 160°
+                        const minAngle = this.activeMinAngle * Math.PI / 180; // Convert to radians
+                        const maxAngle = this.activeMaxAngle * Math.PI / 180; // Convert to radians
+                        const normalizedAngle = minAngle + normalized * (maxAngle - minAngle);
                         player.arrowAngle = -normalizedAngle;
+
+                        // Stop sprite animation when in active mode (not dormant) unless mini boost is animating
+                        // Mini boost animation is handled earlier in the update loop, so we don't override it here
+                        if (player.miniBoostAnimationStart === 0) {
+                            player.spriteFrame = 0;
+                            player.spriteAnimationTime = 0;
+                        }
 
                         // Debug log occasionally to track oscillation
                         if (player.id === this.localPlayerId && Math.floor(Date.now() / 1000) % 2 === 0) {
@@ -629,13 +713,33 @@ class Game {
 
                         }
                     } else {
-                        // Dormant state: oscillate from 50 degrees to 130 degrees
-                        // Range: 50° (5π/18) to 130° (13π/18) = 80° range
+                        // Dormant state: oscillate in configured range
                         const normalized = (1 - Math.cos(player.arrowPhase)) / 2; // 0 to 1
-                        const minAngle = 5 * Math.PI / 18; // 50°
-                        const maxAngle = 13 * Math.PI / 18; // 130°
-                        const normalizedAngle = minAngle + normalized * (maxAngle - minAngle); // 50° to 130°
+                        const minAngle = this.dormantMinAngle * Math.PI / 180; // Convert to radians
+                        const maxAngle = this.dormantMaxAngle * Math.PI / 180; // Convert to radians
+                        const normalizedAngle = minAngle + normalized * (maxAngle - minAngle);
                         player.arrowAngle = -normalizedAngle;
+
+                        // Handle sprite animation: mini boost animation takes priority, otherwise loop frames 0-1
+                        if (player.miniBoostAnimationStart === 0) {
+                            // Normal dormant animation: loop between frame 1 and frame 2 (indices 0 and 1)
+                            // Switch once every 0.67 seconds (each frame shows for 0.67 seconds)
+                            // deltaTime is in normalized frame units (1.0 = one frame at 60fps)
+                            // 0.67 seconds = 40.2 frames at 60fps
+                            player.spriteAnimationTime += deltaTime;
+                            const framesPerSecond = 60; // 60 frames per second at 60fps
+                            const animationSpeed = framesPerSecond * 0.67; // 40.2 frames = 0.67 seconds
+                            const totalFrames = player.spriteAnimationTime;
+                            const frameIndex = Math.floor(totalFrames / animationSpeed) % 2; // Loop between 0 and 1
+                            const previousFrame = player.spriteFrame;
+                            player.spriteFrame = frameIndex;
+                            
+                            // Log when frame switches
+                            if (player.id === this.localPlayerId && previousFrame !== frameIndex) {
+                                const timeInSeconds = totalFrames / framesPerSecond;
+                                console.log(`[DORMANT ANIMATION] Frame switched to ${frameIndex + 1} (index ${frameIndex}) at ${timeInSeconds.toFixed(2)}s (${totalFrames.toFixed(1)} frames)`);
+                            }
+                        }
 
                         // Debug log: show angle every 0.2 seconds (1/5th of a second) for 2 seconds after landing
                         if (player.dormantLandingTime && player.id === this.localPlayerId) {
@@ -677,13 +781,23 @@ class Game {
         if (playersArray.length === 2) {
             const p1 = playersArray[0];
             const p2 = playersArray[1];
-            const ovalWidth = 40;
+            // Base dimensions (will be multiplied by playerSizeMultiplier)
+            const baseOvalWidth = 40;
+            const baseOvalHeight = 50;
+            const ovalWidth = baseOvalWidth * this.playerSizeMultiplier;
+            const ovalHeight = baseOvalHeight * this.playerSizeMultiplier;
 
-            // Calculate distance between players
+            // Calculate distance between players (using center of ovals)
+            // position.y is now the bottom of the oval, so center is at position.y - ovalHeight/2
+            const p1CenterY = p1.position.y - ovalHeight / 2;
+            const p2CenterY = p2.position.y - ovalHeight / 2;
             const dx = p2.position.x - p1.position.x;
-            const dy = p2.position.y - p1.position.y;
+            const dy = p2CenterY - p1CenterY;
             const distance = Math.sqrt(dx * dx + dy * dy);
-            const minDistance = ovalWidth; // Minimum distance to prevent overlap
+            // Use a smaller collision radius to match the sprite's visual size better
+            // The sprite is drawn at ovalWidth/ovalHeight but the actual visual collision should be smaller
+            const collisionRadius = ovalWidth * 0.7; // 70% of oval width to better match sprite visual size
+            const minDistance = collisionRadius; // Minimum distance to prevent overlap
 
             if (distance < minDistance && distance > 0) {
                 // Players are colliding, push them apart
@@ -729,14 +843,6 @@ class Game {
         // Draw ground
         this.ctx.fillStyle = '#0f3460';
         this.ctx.fillRect(0, this.GROUND_Y, this.canvas.width, this.canvas.height - this.GROUND_Y);
-
-        // Draw center line
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-        this.ctx.lineWidth = 2;
-        this.ctx.beginPath();
-        this.ctx.moveTo(this.canvas.width / 2, 0);
-        this.ctx.lineTo(this.canvas.width / 2, this.canvas.height);
-        this.ctx.stroke();
 
         // Draw players
         this.players.forEach((player) => {
@@ -785,12 +891,16 @@ class Game {
         const scaleX = this.canvas.width / editorTotalSize;
         const scaleY = this.canvas.height / editorTotalSize;
 
-        const ovalWidth = 40;
-        const ovalHeight = 50;
+        // Base dimensions (will be multiplied by playerSizeMultiplier)
+        const baseOvalWidth = 40;
+        const baseOvalHeight = 50;
+        const ovalWidth = baseOvalWidth * this.playerSizeMultiplier;
+        const ovalHeight = baseOvalHeight * this.playerSizeMultiplier;
         const playerLeft = player.position.x - ovalWidth / 2;
         const playerRight = player.position.x + ovalWidth / 2;
-        const playerTop = player.position.y - ovalHeight / 2;
-        const playerBottom = player.position.y + ovalHeight / 2;
+        // position.y is now the bottom of the oval (feet)
+        const playerTop = player.position.y - ovalHeight;
+        const playerBottom = player.position.y;
 
         let isOnTopOfBlock = false;
 
@@ -838,15 +948,40 @@ class Game {
                     }
                 } else {
                     // Vertical collision
-                    const playerCenterY = player.position.y;
+                    // position.y is now the bottom of the oval (feet)
+                    const playerBottomY = player.position.y;
+                    const playerTopY = player.position.y - ovalHeight;
+                    const playerCenterY = player.position.y - ovalHeight / 2;
                     const blockCenterY = blockTop + blockHeight / 2;
 
-                    if (playerCenterY < blockCenterY) {
-                        // Player is above block (landing on top)
-                        // Only set grounded if player is falling down (not jumping up into block)
-                        if (player.velocity.y >= 0) {
+                    // Determine if player is above or below block based on their center position
+                    // Also check velocity to handle edge cases
+                    const isAboveBlock = playerCenterY < blockCenterY;
+                    const isMovingUp = player.velocity.y < 0;
+                    const isMovingDown = player.velocity.y >= 0;
 
-                            player.position.y = blockTop - ovalHeight / 2;
+                    // Debug logging for collision detection
+                    console.log(`[BLOCK COLLISION] Player ${playerId}:`, {
+                        playerBottomY: playerBottomY.toFixed(2),
+                        playerTopY: playerTopY.toFixed(2),
+                        playerCenterY: playerCenterY.toFixed(2),
+                        blockTop: blockTop.toFixed(2),
+                        blockBottom: blockBottom.toFixed(2),
+                        blockCenterY: blockCenterY.toFixed(2),
+                        velocityY: player.velocity.y.toFixed(2),
+                        isAboveBlock: isAboveBlock,
+                        isMovingUp: isMovingUp,
+                        isMovingDown: isMovingDown,
+                        playerBottomVsBlockTop: (playerBottomY - blockTop).toFixed(2),
+                        playerTopVsBlockBottom: (playerTopY - blockBottom).toFixed(2)
+                    });
+
+                    if (isAboveBlock) {
+                        // Player is above block (landing on top or hitting from above)
+                        // Only set grounded if player is falling down (not jumping up into block)
+                        if (isMovingDown) {
+                            console.log(`[BLOCK COLLISION] Player ${playerId}: Landing on TOP of block (moving down)`);
+                            player.position.y = blockTop; // Bottom of oval at top of block
                             player.velocity.y = 0;
                             player.grounded = true;
                             isOnTopOfBlock = true;
@@ -858,6 +993,14 @@ class Game {
                                 // FIRST LANDING on platform - enter dormant state (arrow hidden, oscillates 50-130°)
                                 player.arrowActiveMode = false;
                                 player.dormantLandingTime = Date.now(); // Track landing time for debug logs
+                                // Reset sprite animation when entering dormant mode
+                                player.spriteAnimationTime = 0;
+                                player.spriteFrame = 0; // Start at frame 1 (index 0)
+                                // Reset mini boost animation when landing (return to dormant loop)
+                                if (player.miniBoostAnimationStart > 0) {
+                                    console.log(`[PLATFORM LANDING] Reset mini boost animation, returning to dormant loop (frame 1-2)`);
+                                }
+                                player.miniBoostAnimationStart = 0;
 
                                 // Determine oscillation direction based on horizontal velocity BEFORE landing
                                 // Use velocityBeforeCollision since velocity may have been modified
@@ -897,14 +1040,37 @@ class Game {
                             // This prevents multiple collisions from interfering with each other
                             break;
                         } else {
-                            // Player is jumping up into block - push them down
-                            player.position.y = blockBottom + ovalHeight / 2;
+                            // Player is jumping up into block from below - push them down
+                            // Position player so their TOP is just below the block's bottom (with small gap to prevent re-collision)
+                            console.log(`[BLOCK COLLISION] Player ${playerId}: Hitting block from BELOW while moving UP - pushing down`);
+                            const gap = 1; // Small gap to prevent immediate re-collision
+                            // position.y is bottom of oval, so: position.y - ovalHeight = playerTopY
+                            // We want: playerTopY = blockBottom + gap
+                            // Therefore: position.y = blockBottom + ovalHeight + gap
+                            player.position.y = blockBottom + ovalHeight + gap;
                             player.velocity.y = 0;
+                            // Don't break here - continue checking other blocks
                         }
                     } else {
-                        // Player is below block (hitting bottom)
-                        player.position.y = blockBottom + ovalHeight / 2;
-                        player.velocity.y = Math.max(0, player.velocity.y * 0.5); // Bounce down
+                        // Player is below block (hitting bottom of block)
+                        // Check if they're actually moving up into it
+                        if (isMovingUp) {
+                            // Player is moving up into the bottom of the block - push them down
+                            // Position player so their TOP is just below the block's bottom (with small gap to prevent re-collision)
+                            console.log(`[BLOCK COLLISION] Player ${playerId}: Hitting BOTTOM of block while moving UP - pushing down`);
+                            const gap = 1; // Small gap to prevent immediate re-collision
+                            // position.y is bottom of oval, so: position.y - ovalHeight = playerTopY
+                            // We want: playerTopY = blockBottom + gap
+                            // Therefore: position.y = blockBottom + ovalHeight + gap
+                            player.position.y = blockBottom + ovalHeight + gap;
+                            player.velocity.y = 0;
+                        } else {
+                            // Player is falling and hit the bottom of a block (shouldn't normally happen, but handle it)
+                            console.log(`[BLOCK COLLISION] Player ${playerId}: Hitting BOTTOM of block while moving DOWN - bouncing down`);
+                            const gap = 1; // Small gap to prevent immediate re-collision
+                            player.position.y = blockBottom + ovalHeight + gap;
+                            player.velocity.y = Math.max(0, player.velocity.y * 0.5); // Bounce down
+                        }
                     }
                 }
             }
@@ -923,8 +1089,11 @@ class Game {
             chargeProgress = Math.min(chargeTime / this.MAX_CHARGE_TIME, 1.0); // Clamp to 0-1
         }
 
-        const ovalWidth = 40;
-        const ovalHeight = 50;
+        // Base dimensions (will be multiplied by playerSizeMultiplier)
+        const baseOvalWidth = 40;
+        const baseOvalHeight = 50;
+        const ovalWidth = baseOvalWidth * this.playerSizeMultiplier;
+        const ovalHeight = baseOvalHeight * this.playerSizeMultiplier;
 
         // Console logs for debugging
 
@@ -932,100 +1101,68 @@ class Game {
         if (isNaN(position.x) || isNaN(position.y)) {
 
             position.x = side === 'left' ? 150 : 650;
-            position.y = this.GROUND_Y - ovalHeight / 2;
+            position.y = this.GROUND_Y; // Bottom of oval (feet at ground level)
         }
 
         // Save context
         this.ctx.save();
 
-        // Draw oval (player body) - always draw from exact position
+        // Draw oval (player body) - rotate around bottom (feet)
+        // position.y is now the bottom of the oval, so translate to that point
         this.ctx.translate(position.x, position.y);
 
         // Tilt oval to match arrow direction when grounded
         // When arrow is at -90° (straight up), oval should have 0° rotation (upright)
         // When arrow is at 0° (right), oval should tilt right
         // When arrow is at -180° (left), oval should tilt left
+        const straightUpAngle = -Math.PI / 2;
+        const tilt = grounded ? (arrowAngle - straightUpAngle) : 0;
         if (grounded) {
-            // Calculate tilt relative to straight up position
-            // arrowAngle ranges from 0° (right) to -180° (left), with -90° being straight up
-            // When arrow is at -90° (straight up), tilt should be 0° (upright)
-            // So: tilt = arrowAngle - (-90°) = arrowAngle + 90°
-            const straightUpAngle = -Math.PI / 2;
-            const tilt = arrowAngle - straightUpAngle;
-
             this.ctx.rotate(tilt);
         }
 
-        // Draw oval body
-        this.ctx.fillStyle = side === 'left' ? '#4ecdc4' : '#ff6b6b';
-        this.ctx.beginPath();
-        this.ctx.ellipse(0, 0, ovalWidth / 2, ovalHeight / 2, 0, 0, Math.PI * 2);
-        this.ctx.fill();
-
-        // Draw outline
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-        this.ctx.lineWidth = 2;
-        this.ctx.stroke();
-
-        // Draw internal lines to show rotation
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-        this.ctx.lineWidth = 2;
-
-        // Draw a cross pattern inside the oval
-        // Horizontal line
-        this.ctx.beginPath();
-        this.ctx.moveTo(-ovalWidth / 3, 0);
-        this.ctx.lineTo(ovalWidth / 3, 0);
-        this.ctx.stroke();
-
-        // Vertical line
-        this.ctx.beginPath();
-        this.ctx.moveTo(0, -ovalHeight / 3);
-        this.ctx.lineTo(0, ovalHeight / 3);
-        this.ctx.stroke();
-
-        // Draw a small circle in the center for additional reference
-        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, 3, 0, Math.PI * 2);
-        this.ctx.fill();
-
-        // Draw hitboxes - head (top) and butt (bottom)
-        const hitboxWidth = ovalWidth * 0.8 * 1.1; // Slightly smaller than oval width, increased by 10%
-        const hitboxHeight = ovalHeight * 0.2 * 1.1; // Small hitbox area, increased by 10%
-
-        // Head hitbox (top of oval)
-        this.ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)'; // Green for head
-        this.ctx.lineWidth = 2;
-        this.ctx.strokeRect(-hitboxWidth / 2, -ovalHeight / 2, hitboxWidth, hitboxHeight);
-
-        // Butt hitbox (bottom of oval)
-        this.ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)'; // Red for butt
-        this.ctx.lineWidth = 2;
-        this.ctx.strokeRect(-hitboxWidth / 2, ovalHeight / 2 - hitboxHeight, hitboxWidth, hitboxHeight);
-
-        // Draw arrow when grounded AND in active mode (hidden in dormant state)
-        if (grounded && player.arrowActiveMode) {
-            this.ctx.restore();
-            this.ctx.save();
-
-            // Calculate arrow start position at the edge of the oval (ellipse)
-            // Find the point on the ellipse perimeter in the direction of the arrow
-            const a = ovalWidth / 2;  // horizontal radius
-            const b = ovalHeight / 2;  // vertical radius
-            // For an ellipse, the point on the perimeter at angle theta is:
-            // x = a * cos(theta), y = b * sin(theta)
-            const edgeX = a * Math.cos(arrowAngle);
-            const edgeY = b * Math.sin(arrowAngle);
-
-            this.ctx.translate(position.x + edgeX, position.y + edgeY);
-            this.ctx.rotate(arrowAngle);
+        // Draw arrow first (behind the oval) when grounded
+        if (grounded) {
+            // We're in the rotated coordinate system where:
+            // - Origin is at the bottom of the oval (position.x, position.y)
+            // - The oval center is at (0, -ovalHeight/2) in this coordinate system
+            // - The coordinate system is already rotated by 'tilt' if grounded
+            
+            // Move to the center of the oval (in the rotated coordinate system)
+            this.ctx.translate(0, -ovalHeight / 2);
+            
+            // Rotate to point in the arrow direction
+            // arrowAngle is in world coordinates (0° = right, -90° = up, -180° = left)
+            // We need to rotate relative to the current coordinate system
+            // Since we're already rotated by 'tilt', we need to rotate by (arrowAngle - tilt)
+            this.ctx.rotate(arrowAngle - tilt);
 
             // Draw arrow with charge indicator
-            const arrowLength = 60;
+            const arrowLength = 90; // 50% taller (was 60)
+            const isDormant = !player.arrowActiveMode;
             const isCharging = player.id === this.localPlayerId && this.spaceChargeStartTime !== null;
 
-            if (isCharging && chargeProgress > 0) {
+            if (isDormant) {
+                // Dormant mode: grey dotted arrow
+                this.ctx.strokeStyle = '#888888'; // Grey
+                this.ctx.lineWidth = 3;
+                this.ctx.setLineDash([5, 5]); // Dotted pattern: 5px dash, 5px gap
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, 0);
+                this.ctx.lineTo(arrowLength, 0);
+                this.ctx.stroke();
+                this.ctx.setLineDash([]); // Reset dash pattern
+
+                // Dotted arrowhead
+                this.ctx.fillStyle = '#888888';
+                this.ctx.beginPath();
+                this.ctx.moveTo(arrowLength, 0);
+                this.ctx.lineTo(arrowLength - 10, -8);
+                this.ctx.lineTo(arrowLength - 10, 8);
+                this.ctx.closePath();
+                this.ctx.fill();
+            } else if (isCharging && chargeProgress > 0) {
+                // Active mode: charging arrow with charge indicator
                 // Draw charged portion (white) - fills from base to tip based on charge
                 const chargedLength = arrowLength * chargeProgress;
                 this.ctx.strokeStyle = 'white';
@@ -1054,7 +1191,7 @@ class Game {
                 this.ctx.fillStyle = chargeProgress >= 1.0 ? 'white' : '#888888';
                 this.ctx.fill();
             } else {
-                // Normal arrow (white) when not charging
+                // Active mode: normal arrow (white) when not charging
                 this.ctx.strokeStyle = 'white';
                 this.ctx.lineWidth = 3;
                 this.ctx.beginPath();
@@ -1071,9 +1208,104 @@ class Game {
                 this.ctx.fillStyle = 'white';
                 this.ctx.fill();
             }
+
+            // Reset transformations back to bottom of oval for drawing the oval
+            this.ctx.rotate(-(arrowAngle - tilt));
+            this.ctx.translate(0, ovalHeight / 2);
         }
 
+        // Draw sprite or oval body offset upward by half height so it rotates around the bottom
+        if (this.spriteSheetLoaded && this.spriteFrameWidth > 0) {
+            // Draw sprite
+            const spriteFrame = player.spriteFrame !== undefined ? player.spriteFrame : 0; // Use current frame (0-3, but we only use 0-1 for dormant)
+            const spriteX = spriteFrame * this.spriteFrameWidth;
+            const spriteY = 0; // Only one row
+            
+            // Calculate sprite size to match oval dimensions
+            const spriteDisplayWidth = ovalWidth;
+            const spriteDisplayHeight = ovalHeight;
+            
+            // Draw sprite centered at the oval center position
+            this.ctx.drawImage(
+                this.spriteSheet,
+                spriteX, spriteY, this.spriteFrameWidth, this.spriteFrameHeight, // Source rectangle
+                -spriteDisplayWidth / 2, -ovalHeight / 2 - spriteDisplayHeight / 2, // Destination position (centered)
+                spriteDisplayWidth, spriteDisplayHeight // Destination size
+            );
+        } else {
+            // Fallback: draw oval if sprite not loaded
+            this.ctx.fillStyle = side === 'left' ? '#4ecdc4' : '#ff6b6b';
+            this.ctx.beginPath();
+            this.ctx.ellipse(0, -ovalHeight / 2, ovalWidth / 2, ovalHeight / 2, 0, 0, Math.PI * 2);
+            this.ctx.fill();
+        }
+
+        // Draw outline
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+
+        // Draw internal lines to show rotation (offset upward by half height)
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        this.ctx.lineWidth = 2;
+
+        // Draw a cross pattern inside the oval
+        // Horizontal line
+        this.ctx.beginPath();
+        this.ctx.moveTo(-ovalWidth / 3, -ovalHeight / 2);
+        this.ctx.lineTo(ovalWidth / 3, -ovalHeight / 2);
+        this.ctx.stroke();
+
+        // Vertical line
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, -ovalHeight / 2 - ovalHeight / 3);
+        this.ctx.lineTo(0, -ovalHeight / 2 + ovalHeight / 3);
+        this.ctx.stroke();
+
+        // Draw a small circle in the center for additional reference
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        this.ctx.beginPath();
+        this.ctx.arc(0, -ovalHeight / 2, 3, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Draw hitboxes - head (top) and butt (bottom)
+        const hitboxWidth = ovalWidth * 0.8 * 1.1; // Slightly smaller than oval width, increased by 10%
+        const hitboxHeight = ovalHeight * 0.2 * 1.1; // Small hitbox area, increased by 10%
+
+        // Head hitbox (top of oval) - offset upward
+        this.ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)'; // Green for head
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(-hitboxWidth / 2, -ovalHeight, hitboxWidth, hitboxHeight);
+
+        // Butt hitbox (bottom of oval) - at rotation center
+        this.ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)'; // Red for butt
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(-hitboxWidth / 2, -hitboxHeight, hitboxWidth, hitboxHeight);
+
         this.ctx.restore();
+    }
+
+    updateOscillationSpeeds(baseSpeed, activeMultiplier, dormantMultiplier) {
+        this.ARROW_OSCILLATION_SPEED = baseSpeed;
+        this.activeOscillationMultiplier = activeMultiplier;
+        this.dormantOscillationMultiplier = dormantMultiplier;
+    }
+
+    updateOscillationRanges(dormantMinAngle, dormantMaxAngle, activeMinAngle, activeMaxAngle) {
+        this.dormantMinAngle = dormantMinAngle;
+        this.dormantMaxAngle = dormantMaxAngle;
+        this.activeMinAngle = activeMinAngle;
+        this.activeMaxAngle = activeMaxAngle;
+    }
+
+    updatePlayerSize(sizeMultiplier) {
+        this.playerSizeMultiplier = sizeMultiplier;
+    }
+
+    updateBoostSettings(miniBoostStrength, minBouncePower, maxBouncePower) {
+        this.MINI_BOOST_POWER = miniBoostStrength;
+        this.MIN_BOUNCE_POWER = minBouncePower;
+        this.BOUNCE_POWER = maxBouncePower;
     }
 
     start() {

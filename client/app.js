@@ -44,6 +44,72 @@ const signUpBtn = document.getElementById('signUpBtn');
 const cancelAuthBtn = document.getElementById('cancelAuthBtn');
 const authError = document.getElementById('authError');
 const levelsList = document.getElementById('levelsList');
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsModule = document.getElementById('settingsModule');
+const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+const playerSizeInput = document.getElementById('playerSize');
+const baseOscillationSpeedInput = document.getElementById('baseOscillationSpeed');
+const activeOscillationSpeedInput = document.getElementById('activeOscillationSpeed');
+const dormantOscillationSpeedInput = document.getElementById('dormantOscillationSpeed');
+const dormantMinAngleInput = document.getElementById('dormantMinAngle');
+const dormantMaxAngleInput = document.getElementById('dormantMaxAngle');
+const activeMinAngleInput = document.getElementById('activeMinAngle');
+const activeMaxAngleInput = document.getElementById('activeMaxAngle');
+const miniBoostStrengthInput = document.getElementById('miniBoostStrength');
+const minBouncePowerInput = document.getElementById('minBouncePower');
+const maxBouncePowerInput = document.getElementById('maxBouncePower');
+const playerSizeValue = document.getElementById('playerSizeValue');
+const baseOscillationSpeedValue = document.getElementById('baseOscillationSpeedValue');
+const activeOscillationSpeedValue = document.getElementById('activeOscillationSpeedValue');
+const dormantOscillationSpeedValue = document.getElementById('dormantOscillationSpeedValue');
+const activeFinalSpeed = document.getElementById('activeFinalSpeed');
+const dormantFinalSpeed = document.getElementById('dormantFinalSpeed');
+const miniBoostStrengthValue = document.getElementById('miniBoostStrengthValue');
+const minBouncePowerValue = document.getElementById('minBouncePowerValue');
+const maxBouncePowerValue = document.getElementById('maxBouncePowerValue');
+const settingsMessage = document.getElementById('settingsMessage');
+
+// Function to update final speed displays
+function updateFinalSpeeds() {
+    const baseSpeed = parseFloat(baseOscillationSpeedInput.value) || 0.036;
+    const activeMultiplier = parseFloat(activeOscillationSpeedInput.value) || 1.1;
+    const dormantMultiplier = parseFloat(dormantOscillationSpeedInput.value) || 1.1;
+    activeFinalSpeed.textContent = (baseSpeed * activeMultiplier).toFixed(5);
+    dormantFinalSpeed.textContent = (baseSpeed * dormantMultiplier).toFixed(5);
+}
+
+// Update slider value displays in real-time
+playerSizeInput.addEventListener('input', (e) => {
+    playerSizeValue.textContent = parseFloat(e.target.value).toFixed(1);
+});
+
+baseOscillationSpeedInput.addEventListener('input', (e) => {
+    baseOscillationSpeedValue.textContent = parseFloat(e.target.value).toFixed(3);
+    updateFinalSpeeds();
+});
+
+activeOscillationSpeedInput.addEventListener('input', (e) => {
+    activeOscillationSpeedValue.textContent = parseFloat(e.target.value).toFixed(2);
+    updateFinalSpeeds();
+});
+
+dormantOscillationSpeedInput.addEventListener('input', (e) => {
+    dormantOscillationSpeedValue.textContent = parseFloat(e.target.value).toFixed(2);
+    updateFinalSpeeds();
+});
+
+miniBoostStrengthInput.addEventListener('input', (e) => {
+    miniBoostStrengthValue.textContent = parseFloat(e.target.value).toFixed(2);
+});
+
+minBouncePowerInput.addEventListener('input', (e) => {
+    minBouncePowerValue.textContent = parseFloat(e.target.value).toFixed(2);
+});
+
+maxBouncePowerInput.addEventListener('input', (e) => {
+    maxBouncePowerValue.textContent = parseFloat(e.target.value).toFixed(2);
+});
 
 let lastHeadBounceAlertTime = 0;
 let lastHeadBounceBoostTime = new Map(); // playerId -> timestamp
@@ -161,9 +227,45 @@ networkManager.on('gameStart', (data) => {
     // Initialize game
     if (!game) {
         game = new Game(gameCanvas, networkManager);
+        // Load and apply user settings
+        loadUserSettings().then(() => {
+            const playerSize = parseFloat(playerSizeInput.value) || 1.2;
+            const baseSpeed = parseFloat(baseOscillationSpeedInput.value) || 0.036;
+            const activeSpeed = parseFloat(activeOscillationSpeedInput.value) || 1.1;
+            const dormantSpeed = parseFloat(dormantOscillationSpeedInput.value) || 1.1;
+            const dormantMinAngle = parseFloat(dormantMinAngleInput.value) || 50;
+            const dormantMaxAngle = parseFloat(dormantMaxAngleInput.value) || 130;
+            const activeMinAngle = parseFloat(activeMinAngleInput.value) || 30;
+            const activeMaxAngle = parseFloat(activeMaxAngleInput.value) || 150;
+            const miniBoost = parseFloat(miniBoostStrengthInput.value) || 10.21;
+            const minBounce = parseFloat(minBouncePowerInput.value) || 6.0;
+            const maxBounce = parseFloat(maxBouncePowerInput.value) || 11.25;
+            game.updatePlayerSize(playerSize);
+            game.updateOscillationSpeeds(baseSpeed, activeSpeed, dormantSpeed);
+            game.updateOscillationRanges(dormantMinAngle, dormantMaxAngle, activeMinAngle, activeMaxAngle);
+            game.updateBoostSettings(miniBoost, minBounce, maxBounce);
+        });
         game.start();
     } else {
         game.reset();
+        // Reload settings when game resets
+        loadUserSettings().then(() => {
+            const playerSize = parseFloat(playerSizeInput.value) || 1.2;
+            const baseSpeed = parseFloat(baseOscillationSpeedInput.value) || 0.036;
+            const activeSpeed = parseFloat(activeOscillationSpeedInput.value) || 1.1;
+            const dormantSpeed = parseFloat(dormantOscillationSpeedInput.value) || 1.1;
+            const dormantMinAngle = parseFloat(dormantMinAngleInput.value) || 50;
+            const dormantMaxAngle = parseFloat(dormantMaxAngleInput.value) || 130;
+            const activeMinAngle = parseFloat(activeMinAngleInput.value) || 30;
+            const activeMaxAngle = parseFloat(activeMaxAngleInput.value) || 150;
+            const miniBoost = parseFloat(miniBoostStrengthInput.value) || 10.21;
+            const minBounce = parseFloat(minBouncePowerInput.value) || 6.0;
+            const maxBounce = parseFloat(maxBouncePowerInput.value) || 11.25;
+            game.updatePlayerSize(playerSize);
+            game.updateOscillationSpeeds(baseSpeed, activeSpeed, dormantSpeed);
+            game.updateOscillationRanges(dormantMinAngle, dormantMaxAngle, activeMinAngle, activeMaxAngle);
+            game.updateBoostSettings(miniBoost, minBounce, maxBounce);
+        });
     }
 
     // Set custom level if present
@@ -206,18 +308,19 @@ networkManager.on('countdown', (data) => {
     if (data.countdown > 0) {
         countdownText.textContent = data.countdown;
     } else {
-        countdownText.textContent = data.message || 'Bounce!';
-        setTimeout(() => {
-            countdownOverlay.classList.add('hidden');
-            if (game) {
-                game.gameStarted = true;
-            }
-            // Start timer when game actually starts
-            if (pendingTimerDuration) {
-                startMatchTimer(pendingTimerDuration);
-                pendingTimerDuration = null;
-            }
-        }, 1000);
+        // Countdown reached 0 (Bounce screen) - skip it entirely and start game immediately
+        countdownOverlay.classList.add('hidden');
+        if (game) {
+            game.gameStarted = true;
+        }
+        // Start timer when game actually starts
+        if (pendingTimerDuration) {
+            startMatchTimer(pendingTimerDuration);
+            pendingTimerDuration = null;
+        } else if (data.matchDuration) {
+            // Fallback: use matchDuration from countdown event if pendingTimerDuration wasn't set
+            startMatchTimer(data.matchDuration);
+        }
     }
 });
 
@@ -420,6 +523,24 @@ closeLevelsBtn.addEventListener('click', () => {
     showScreen(menuScreen);
 });
 
+// Settings button event listeners
+settingsBtn.addEventListener('click', async () => {
+    if (!authManager.isSignedIn()) {
+        authPopup.classList.remove('hidden');
+    } else {
+        await loadUserSettings();
+        showScreen(settingsModule);
+    }
+});
+
+closeSettingsBtn.addEventListener('click', () => {
+    showScreen(menuScreen);
+});
+
+saveSettingsBtn.addEventListener('click', async () => {
+    await saveUserSettings();
+});
+
 addLevelBtn.addEventListener('click', () => {
     editingLevelId = null; // Reset editing state for new level
     if (!levelEditor) {
@@ -598,6 +719,307 @@ async function loadUserLevels() {
     }
 }
 
+// Firebase settings management functions
+async function saveUserSettings() {
+    if (!authManager.isSignedIn()) {
+        settingsMessage.textContent = 'You must be signed in to save settings';
+        settingsMessage.style.color = 'red';
+        return;
+    }
+
+    const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+    const db = window.firebaseDb;
+
+    try {
+        // Parse all values and ensure they're valid numbers
+        const playerSize = parseFloat(playerSizeInput.value);
+        const baseSpeed = parseFloat(baseOscillationSpeedInput.value);
+        const activeSpeed = parseFloat(activeOscillationSpeedInput.value);
+        const dormantSpeed = parseFloat(dormantOscillationSpeedInput.value);
+        const dormantMinAngle = parseFloat(dormantMinAngleInput.value);
+        const dormantMaxAngle = parseFloat(dormantMaxAngleInput.value);
+        const activeMinAngle = parseFloat(activeMinAngleInput.value);
+        const activeMaxAngle = parseFloat(activeMaxAngleInput.value);
+        const miniBoost = parseFloat(miniBoostStrengthInput.value);
+        const minBounce = parseFloat(minBouncePowerInput.value);
+        const maxBounce = parseFloat(maxBouncePowerInput.value);
+
+        // Validate all inputs are numbers first
+        if (isNaN(playerSize) || isNaN(baseSpeed) || isNaN(activeSpeed) || isNaN(dormantSpeed) ||
+            isNaN(dormantMinAngle) || isNaN(dormantMaxAngle) || isNaN(activeMinAngle) || isNaN(activeMaxAngle) ||
+            isNaN(miniBoost) || isNaN(minBounce) || isNaN(maxBounce)) {
+            settingsMessage.textContent = 'All settings must be valid numbers';
+            settingsMessage.style.color = 'red';
+            console.error('Validation failed - NaN values detected:', {
+                playerSize, baseSpeed, activeSpeed, dormantSpeed,
+                dormantMinAngle, dormantMaxAngle, activeMinAngle, activeMaxAngle,
+                miniBoost, minBounce, maxBounce
+            });
+            return;
+        }
+
+        // Validate inputs
+        if (playerSize < 0.5 || playerSize > 7.0) {
+            settingsMessage.textContent = 'Player size must be between 0.5 and 7.0';
+            settingsMessage.style.color = 'red';
+            return;
+        }
+
+        if (baseSpeed < 0.01 || baseSpeed > 0.1) {
+            settingsMessage.textContent = 'Base oscillation speed must be between 0.01 and 0.1';
+            settingsMessage.style.color = 'red';
+            return;
+        }
+
+        if (isNaN(activeSpeed) || activeSpeed < 0.1 || activeSpeed > 3.0) {
+            settingsMessage.textContent = 'Active oscillation speed must be between 0.1 and 3.0';
+            settingsMessage.style.color = 'red';
+            return;
+        }
+
+        if (isNaN(dormantSpeed) || dormantSpeed < 0.1 || dormantSpeed > 3.0) {
+            settingsMessage.textContent = 'Dormant oscillation speed must be between 0.1 and 3.0';
+            settingsMessage.style.color = 'red';
+            return;
+        }
+
+        if (isNaN(dormantMinAngle) || dormantMinAngle < 0 || dormantMinAngle > 180) {
+            settingsMessage.textContent = 'Dormant min angle must be between 0 and 180 degrees';
+            settingsMessage.style.color = 'red';
+            return;
+        }
+
+        if (isNaN(dormantMaxAngle) || dormantMaxAngle < 0 || dormantMaxAngle > 180) {
+            settingsMessage.textContent = 'Dormant max angle must be between 0 and 180 degrees';
+            settingsMessage.style.color = 'red';
+            return;
+        }
+
+        if (dormantMinAngle >= dormantMaxAngle) {
+            settingsMessage.textContent = 'Dormant min angle must be less than max angle';
+            settingsMessage.style.color = 'red';
+            return;
+        }
+
+        if (isNaN(activeMinAngle) || activeMinAngle < 0 || activeMinAngle > 180) {
+            settingsMessage.textContent = 'Active min angle must be between 0 and 180 degrees';
+            settingsMessage.style.color = 'red';
+            return;
+        }
+
+        if (isNaN(activeMaxAngle) || activeMaxAngle < 0 || activeMaxAngle > 180) {
+            settingsMessage.textContent = 'Active max angle must be between 0 and 180 degrees';
+            settingsMessage.style.color = 'red';
+            return;
+        }
+
+        if (activeMinAngle >= activeMaxAngle) {
+            settingsMessage.textContent = 'Active min angle must be less than max angle';
+            settingsMessage.style.color = 'red';
+            return;
+        }
+
+        if (isNaN(miniBoost) || miniBoost < 5.0 || miniBoost > 20.0) {
+            settingsMessage.textContent = 'Mini boost strength must be between 5.0 and 20.0';
+            settingsMessage.style.color = 'red';
+            return;
+        }
+
+        if (isNaN(minBounce) || minBounce < 1.0 || minBounce > 15.0) {
+            settingsMessage.textContent = 'Minimum bounce power must be between 1.0 and 15.0';
+            settingsMessage.style.color = 'red';
+            return;
+        }
+
+        if (isNaN(maxBounce) || maxBounce < 5.0 || maxBounce > 25.0) {
+            settingsMessage.textContent = 'Maximum bounce power must be between 5.0 and 25.0';
+            settingsMessage.style.color = 'red';
+            return;
+        }
+
+        if (minBounce >= maxBounce) {
+            settingsMessage.textContent = 'Minimum bounce power must be less than maximum bounce power';
+            settingsMessage.style.color = 'red';
+            return;
+        }
+
+        const userId = authManager.getUserId();
+        const settingsRef = doc(db, 'userSettings', userId);
+
+        // Ensure all values are numbers (not NaN) before saving
+        const settingsData = {
+            playerSize: Number(playerSize),
+            baseOscillationSpeed: Number(baseSpeed),
+            activeOscillationSpeed: Number(activeSpeed),
+            dormantOscillationSpeed: Number(dormantSpeed),
+            dormantMinAngle: Number(dormantMinAngle),
+            dormantMaxAngle: Number(dormantMaxAngle),
+            activeMinAngle: Number(activeMinAngle),
+            activeMaxAngle: Number(activeMaxAngle),
+            miniBoostStrength: Number(miniBoost),
+            minBouncePower: Number(minBounce),
+            maxBouncePower: Number(maxBounce),
+            updatedAt: new Date()
+        };
+
+        // Double-check no NaN values
+        for (const [key, value] of Object.entries(settingsData)) {
+            if (key !== 'updatedAt' && (isNaN(value) || !isFinite(value))) {
+                settingsMessage.textContent = `Invalid value for ${key}: ${value}`;
+                settingsMessage.style.color = 'red';
+                console.error(`Invalid setting value: ${key} = ${value}`);
+                return;
+            }
+        }
+
+        // Log settings data before saving for debugging
+        console.log('Saving settings to Firebase:', settingsData);
+
+        try {
+            await setDoc(settingsRef, settingsData, { merge: true });
+        } catch (firebaseError) {
+            console.error('Firebase error details:', firebaseError);
+            console.error('Settings data that failed:', settingsData);
+            settingsMessage.textContent = `Error saving settings: ${firebaseError.message}`;
+            settingsMessage.style.color = 'red';
+            return;
+        }
+
+        settingsMessage.textContent = 'Settings saved successfully!';
+        settingsMessage.style.color = 'white';
+
+        // Update game if it's running
+        if (game) {
+            game.updatePlayerSize(playerSize);
+            game.updateOscillationSpeeds(baseSpeed, activeSpeed, dormantSpeed);
+            game.updateOscillationRanges(dormantMinAngle, dormantMaxAngle, activeMinAngle, activeMaxAngle);
+            game.updateBoostSettings(miniBoost, minBounce, maxBounce);
+        }
+
+        // Close settings modal after showing success message (1 second delay)
+        setTimeout(() => {
+            settingsMessage.textContent = '';
+            showScreen(menuScreen);
+        }, 1000);
+    } catch (error) {
+        console.error('Error saving settings:', error);
+        settingsMessage.textContent = 'Failed to save settings';
+        settingsMessage.style.color = 'red';
+    }
+}
+
+async function loadUserSettings() {
+    // Default values
+    const defaults = {
+        playerSize: '1.2',
+        baseOscillationSpeed: '0.036',
+        activeOscillationSpeed: '1.1',
+        dormantOscillationSpeed: '1.1',
+        dormantMinAngle: '50',
+        dormantMaxAngle: '130',
+        activeMinAngle: '30',
+        activeMaxAngle: '150',
+        miniBoostStrength: '10.21',
+        minBouncePower: '6.0',
+        maxBouncePower: '11.25'
+    };
+
+    if (!authManager.isSignedIn()) {
+        // Reset to defaults if not signed in
+        playerSizeInput.value = defaults.playerSize;
+        baseOscillationSpeedInput.value = defaults.baseOscillationSpeed;
+        activeOscillationSpeedInput.value = defaults.activeOscillationSpeed;
+        dormantOscillationSpeedInput.value = defaults.dormantOscillationSpeed;
+        dormantMinAngleInput.value = defaults.dormantMinAngle;
+        dormantMaxAngleInput.value = defaults.dormantMaxAngle;
+        activeMinAngleInput.value = defaults.activeMinAngle;
+        activeMaxAngleInput.value = defaults.activeMaxAngle;
+        miniBoostStrengthInput.value = defaults.miniBoostStrength;
+        minBouncePowerInput.value = defaults.minBouncePower;
+        maxBouncePowerInput.value = defaults.maxBouncePower;
+        // Update display values
+        playerSizeValue.textContent = defaults.playerSize;
+        baseOscillationSpeedValue.textContent = defaults.baseOscillationSpeed;
+        activeOscillationSpeedValue.textContent = defaults.activeOscillationSpeed;
+        dormantOscillationSpeedValue.textContent = defaults.dormantOscillationSpeed;
+        miniBoostStrengthValue.textContent = defaults.miniBoostStrength;
+        minBouncePowerValue.textContent = defaults.minBouncePower;
+        maxBouncePowerValue.textContent = defaults.maxBouncePower;
+        updateFinalSpeeds();
+        return;
+    }
+
+    const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+    const db = window.firebaseDb;
+
+    try {
+        const userId = authManager.getUserId();
+        const settingsRef = doc(db, 'userSettings', userId);
+        const settingsDoc = await getDoc(settingsRef);
+
+        if (settingsDoc.exists()) {
+            const settings = settingsDoc.data();
+            playerSizeInput.value = settings.playerSize || defaults.playerSize;
+            baseOscillationSpeedInput.value = settings.baseOscillationSpeed || defaults.baseOscillationSpeed;
+            activeOscillationSpeedInput.value = settings.activeOscillationSpeed || defaults.activeOscillationSpeed;
+            dormantOscillationSpeedInput.value = settings.dormantOscillationSpeed || defaults.dormantOscillationSpeed;
+            dormantMinAngleInput.value = settings.dormantMinAngle || defaults.dormantMinAngle;
+            dormantMaxAngleInput.value = settings.dormantMaxAngle || defaults.dormantMaxAngle;
+            activeMinAngleInput.value = settings.activeMinAngle || defaults.activeMinAngle;
+            activeMaxAngleInput.value = settings.activeMaxAngle || defaults.activeMaxAngle;
+            miniBoostStrengthInput.value = settings.miniBoostStrength || defaults.miniBoostStrength;
+            minBouncePowerInput.value = settings.minBouncePower || defaults.minBouncePower;
+            maxBouncePowerInput.value = settings.maxBouncePower || defaults.maxBouncePower;
+        } else {
+            // Use defaults if no settings exist
+            playerSizeInput.value = defaults.playerSize;
+            baseOscillationSpeedInput.value = defaults.baseOscillationSpeed;
+            activeOscillationSpeedInput.value = defaults.activeOscillationSpeed;
+            dormantOscillationSpeedInput.value = defaults.dormantOscillationSpeed;
+            dormantMinAngleInput.value = defaults.dormantMinAngle;
+            dormantMaxAngleInput.value = defaults.dormantMaxAngle;
+            activeMinAngleInput.value = defaults.activeMinAngle;
+            activeMaxAngleInput.value = defaults.activeMaxAngle;
+            miniBoostStrengthInput.value = defaults.miniBoostStrength;
+            minBouncePowerInput.value = defaults.minBouncePower;
+            maxBouncePowerInput.value = defaults.maxBouncePower;
+        }
+        
+        // Update display values
+        playerSizeValue.textContent = parseFloat(playerSizeInput.value).toFixed(1);
+        baseOscillationSpeedValue.textContent = parseFloat(baseOscillationSpeedInput.value).toFixed(3);
+        activeOscillationSpeedValue.textContent = parseFloat(activeOscillationSpeedInput.value).toFixed(2);
+        dormantOscillationSpeedValue.textContent = parseFloat(dormantOscillationSpeedInput.value).toFixed(2);
+        miniBoostStrengthValue.textContent = parseFloat(miniBoostStrengthInput.value).toFixed(2);
+        minBouncePowerValue.textContent = parseFloat(minBouncePowerInput.value).toFixed(2);
+        maxBouncePowerValue.textContent = parseFloat(maxBouncePowerInput.value).toFixed(2);
+        updateFinalSpeeds();
+    } catch (error) {
+        console.error('Error loading settings:', error);
+        // Use defaults on error
+        playerSizeInput.value = defaults.playerSize;
+        baseOscillationSpeedInput.value = defaults.baseOscillationSpeed;
+        activeOscillationSpeedInput.value = defaults.activeOscillationSpeed;
+        dormantOscillationSpeedInput.value = defaults.dormantOscillationSpeed;
+        dormantMinAngleInput.value = defaults.dormantMinAngle;
+        dormantMaxAngleInput.value = defaults.dormantMaxAngle;
+        activeMinAngleInput.value = defaults.activeMinAngle;
+        activeMaxAngleInput.value = defaults.activeMaxAngle;
+        miniBoostStrengthInput.value = defaults.miniBoostStrength;
+        minBouncePowerInput.value = defaults.minBouncePower;
+        maxBouncePowerInput.value = defaults.maxBouncePower;
+        // Update display values
+        playerSizeValue.textContent = defaults.playerSize;
+        baseOscillationSpeedValue.textContent = defaults.baseOscillationSpeed;
+        activeOscillationSpeedValue.textContent = defaults.activeOscillationSpeed;
+        dormantOscillationSpeedValue.textContent = defaults.dormantOscillationSpeed;
+        miniBoostStrengthValue.textContent = defaults.miniBoostStrength;
+        minBouncePowerValue.textContent = defaults.minBouncePower;
+        maxBouncePowerValue.textContent = defaults.maxBouncePower;
+        updateFinalSpeeds();
+    }
+}
+
 function renderLevelsList() {
     if (userLevels.length === 0) {
         levelsList.innerHTML = '<p class="no-levels-text">You currently have no levels</p>';
@@ -646,7 +1068,26 @@ function renderLevelsList() {
 }
 
 // Override auth manager callbacks
-authManager.onSignedIn = () => {
+authManager.onSignedIn = async () => {
+    await loadUserSettings();
+    // Apply settings to game if it exists
+    if (game) {
+        const playerSize = parseFloat(playerSizeInput.value) || 1.2;
+        const baseSpeed = parseFloat(baseOscillationSpeedInput.value) || 0.036;
+        const activeSpeed = parseFloat(activeOscillationSpeedInput.value) || 1.1;
+        const dormantSpeed = parseFloat(dormantOscillationSpeedInput.value) || 1.1;
+        const dormantMinAngle = parseFloat(dormantMinAngleInput.value) || 50;
+        const dormantMaxAngle = parseFloat(dormantMaxAngleInput.value) || 130;
+        const activeMinAngle = parseFloat(activeMinAngleInput.value) || 30;
+        const activeMaxAngle = parseFloat(activeMaxAngleInput.value) || 150;
+        const miniBoost = parseFloat(miniBoostStrengthInput.value) || 10.21;
+        const minBounce = parseFloat(minBouncePowerInput.value) || 6.0;
+        const maxBounce = parseFloat(maxBouncePowerInput.value) || 11.25;
+        game.updatePlayerSize(playerSize);
+        game.updateOscillationSpeeds(baseSpeed, activeSpeed, dormantSpeed);
+        game.updateOscillationRanges(dormantMinAngle, dormantMaxAngle, activeMinAngle, activeMaxAngle);
+        game.updateBoostSettings(miniBoost, minBounce, maxBounce);
+    }
     loadUserLevels();
 };
 

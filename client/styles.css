@@ -336,6 +336,153 @@ h2 {
     margin-bottom: 15px;
 }
 
+/* Settings Module Styles */
+.settings-content {
+    text-align: left;
+    margin: 20px 0;
+    max-height: 60vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 10px;
+}
+
+/* Custom scrollbar for settings */
+.settings-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.settings-content::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.settings-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+}
+
+.settings-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.setting-item {
+    margin-bottom: 25px;
+}
+
+.setting-item label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.setting-input {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    font-size: 16px;
+    margin-bottom: 5px;
+}
+
+.setting-input:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.setting-slider {
+    width: 100%;
+    height: 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    outline: none;
+    margin-bottom: 5px;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.setting-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.9);
+    cursor: pointer;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+}
+
+.setting-slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.9);
+    cursor: pointer;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+}
+
+.setting-item label span {
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: normal;
+    margin-left: 5px;
+}
+
+.angle-range-inputs {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 5px;
+}
+
+.angle-input {
+    flex: 1;
+    max-width: 100px;
+    padding: 8px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    font-size: 16px;
+    text-align: center;
+}
+
+.angle-input:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.angle-separator {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 14px;
+}
+
+.angle-unit {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 14px;
+    margin-left: 5px;
+}
+
+.setting-description {
+    font-size: 0.85em;
+    color: rgba(255, 255, 255, 0.7);
+    margin-top: 5px;
+    line-height: 1.4;
+}
+
+.settings-message {
+    margin-top: 15px;
+    padding: 10px;
+    border-radius: 8px;
+    text-align: center;
+    font-weight: bold;
+    min-height: 20px;
+    color: white;
+}
+
 .room-code-display {
     background: rgba(78, 205, 196, 0.2);
     padding: 15px;

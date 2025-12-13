@@ -225,14 +225,15 @@ class Room {
     const p2 = playersArray[1];
 
     // Oval dimensions
-    const ovalWidth = 40;
-    const ovalHeight = 50;
+    const ovalWidth = 48; // 40 * 1.2 = 48 (20% larger)
+    const ovalHeight = 60; // 50 * 1.2 = 60 (20% larger)
 
     // Calculate hitbox positions
-    const p1Bottom = p1.position.y + ovalHeight / 2;
-    const p1Top = p1.position.y - ovalHeight / 2;
-    const p2Bottom = p2.position.y + ovalHeight / 2;
-    const p2Top = p2.position.y - ovalHeight / 2;
+    // position.y is now the bottom of the oval (feet)
+    const p1Bottom = p1.position.y;
+    const p1Top = p1.position.y - ovalHeight;
+    const p2Bottom = p2.position.y;
+    const p2Top = p2.position.y - ovalHeight;
 
     const p1Left = p1.position.x - ovalWidth / 2;
     const p1Right = p1.position.x + ovalWidth / 2;
